@@ -8,7 +8,6 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import TimeTracking from "./pages/TimeTracking";
-import Projects from "./pages/Projects";
 import Vacation from "./pages/Vacation";
 import Scheduling from "./pages/Scheduling";
 import Employees from "./pages/Employees";
@@ -28,14 +27,13 @@ const App = () => (
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/time-tracking" element={<TimeTracking />} />
-          <Route path="/projects" element={<Projects />} />
-          <Route path="/vacation" element={<Vacation />} />
-          <Route path="/scheduling" element={<Scheduling />} />
-          <Route path="/employees" element={<Employees />} />
-          <Route path="/groups" element={<Groups />} />
-          <Route path="/settings" element={<Settings />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/time-tracking" element={<TimeTracking />} />
+        <Route path="/vacation" element={<Vacation />} />
+        <Route path="/scheduling" element={<Scheduling />} />
+        <Route path="/employees" element={<Employees />} />
+        <Route path="/groups" element={<Groups />} />
+        <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

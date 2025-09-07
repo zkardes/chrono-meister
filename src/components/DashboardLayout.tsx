@@ -49,7 +49,6 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Zeiterfassung", href: "/time-tracking", icon: Clock },
-    { name: "Projekte", href: "/projects", icon: FileText },
     { name: "Urlaubsplanung", href: "/vacation", icon: Calendar },
     { name: "Schichtplanung", href: "/scheduling", icon: ClipboardList },
   ];
