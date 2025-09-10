@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Clock, Play, Pause, Coffee, Plus, Download } from "lucide-react";
@@ -13,21 +12,12 @@ import { useToast } from "@/hooks/use-toast";
 const TimeTracking = () => {
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [selectedProject, setSelectedProject] = useState("");
 
   const timeEntries = [
-    { id: 1, date: "2024-01-15", start: "09:00", end: "12:30", project: "Website Redesign", duration: "3h 30min" },
-    { id: 2, date: "2024-01-15", start: "13:30", end: "17:45", project: "Mobile App", duration: "4h 15min" },
-    { id: 3, date: "2024-01-14", start: "08:30", end: "12:00", project: "API Development", duration: "3h 30min" },
-    { id: 4, date: "2024-01-14", start: "13:00", end: "18:00", project: "Website Redesign", duration: "5h 00min" },
-  ];
-
-  const projects = [
-    "Website Redesign",
-    "Mobile App",
-    "API Development",
-    "Marketing Campaign",
-    "Customer Portal"
+    { id: 1, date: "2024-01-15", start: "09:00", end: "12:30", duration: "3h 30min" },
+    { id: 2, date: "2024-01-15", start: "13:30", end: "17:45", duration: "4h 15min" },
+    { id: 3, date: "2024-01-14", start: "08:30", end: "12:00", duration: "3h 30min" },
+    { id: 4, date: "2024-01-14", start: "13:00", end: "18:00", duration: "5h 00min" },
   ];
 
   const handleManualEntry = () => {
@@ -60,40 +50,25 @@ const TimeTracking = () => {
           </Button>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-8 md:grid-cols-4">
           {/* Quick Actions */}
-          <Card className="md:col-span-2">
+          <Card className="md:col-span-3">
             <CardHeader>
               <CardTitle>Schnellaktionen</CardTitle>
               <CardDescription>
-                Starten Sie die Zeiterfassung für ein Projekt
+                Starten Sie die Zeiterfassung
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Button size="lg" variant="success" className="h-24">
+                <Button size="lg" variant="success" className="h-48">
                   <Play className="mr-2" />
                   Zeit starten
                 </Button>
-                <Button size="lg" variant="outline" className="h-24">
+                <Button size="lg" variant="outline" className="h-48">
                   <Coffee className="mr-2" />
                   Pause beginnen
                 </Button>
-              </div>
-              <div className="space-y-2">
-                <Label>Projekt auswählen</Label>
-                <Select value={selectedProject} onValueChange={setSelectedProject}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Projekt wählen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project} value={project}>
-                        {project}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </CardContent>
           </Card>
@@ -104,12 +79,13 @@ const TimeTracking = () => {
               <CardTitle>Kalender</CardTitle>
             </CardHeader>
             <CardContent>
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={setSelectedDate}
-                className="rounded-md border"
-              />
+              <div className="w-full max-w-full overflow-hidden">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={setSelectedDate}
+                />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -137,7 +113,6 @@ const TimeTracking = () => {
                       <div className="flex items-center gap-4">
                         <Clock className="h-4 w-4 text-muted-foreground" />
                         <div>
-                          <p className="font-medium">{entry.project}</p>
                           <p className="text-sm text-muted-foreground">
                             {entry.date} • {entry.start} - {entry.end}
                           </p>
@@ -162,26 +137,9 @@ const TimeTracking = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Datum</Label>
-                    <Input type="date" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Projekt</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Projekt wählen" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {projects.map((project) => (
-                          <SelectItem key={project} value={project}>
-                            {project}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Datum</Label>
+                  <Input type="date" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

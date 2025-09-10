@@ -56,9 +56,9 @@ const Dashboard = () => {
       color: "text-primary",
     },
     {
-      title: "Aktive Projekte",
-      value: "5",
-      icon: FileText,
+      title: "Wochenstunden",
+      value: "32.5h",
+      icon: TrendingUp,
       color: "text-success",
     },
     {
@@ -77,9 +77,10 @@ const Dashboard = () => {
 
   const recentActivities = [
     { time: "09:00", user: "Max Müller", action: "Eingestempelt", type: "clock-in" },
-    { time: "09:15", user: "Anna Schmidt", action: "Projekt 'Website Redesign' gestartet", type: "project" },
+    { time: "09:15", user: "Anna Schmidt", action: "Schicht Frühschicht begonnen", type: "shift" },
     { time: "10:30", user: "Tom Weber", action: "Urlaubsantrag eingereicht", type: "vacation" },
     { time: "11:00", user: "Lisa Klein", action: "Pausenzeit beendet", type: "break" },
+    { time: "14:00", user: "Peter Klein", action: "Schichtwechsel zu Spätschicht", type: "shift" },
   ];
 
   return (
@@ -136,7 +137,7 @@ const Dashboard = () => {
           <TabsList>
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
             <TabsTrigger value="activities">Aktivitäten</TabsTrigger>
-            <TabsTrigger value="projects">Projekte</TabsTrigger>
+            <TabsTrigger value="schedule">Schichtplan</TabsTrigger>
             {userRole === "admin" && <TabsTrigger value="team">Team</TabsTrigger>}
           </TabsList>
 
@@ -157,32 +158,7 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Projektverteilung</CardTitle>
-                  <CardDescription>
-                    Zeit pro Projekt diese Woche
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Website Redesign</span>
-                      <span className="text-sm font-medium">12h 30min</span>
-                    </div>
-                    <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
-                      <div className="h-full bg-primary" style={{ width: '60%' }} />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Mobile App</span>
-                      <span className="text-sm font-medium">8h 15min</span>
-                    </div>
-                    <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
-                      <div className="h-full bg-success" style={{ width: '40%' }} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+             
             </div>
           </TabsContent>
 
@@ -203,7 +179,7 @@ const Dashboard = () => {
                       </span>
                       <div className={`w-2 h-2 rounded-full ${
                         activity.type === 'clock-in' ? 'bg-success' :
-                        activity.type === 'project' ? 'bg-primary' :
+                        activity.type === 'shift' ? 'bg-primary' :
                         activity.type === 'vacation' ? 'bg-warning' :
                         'bg-muted'
                       }`} />
@@ -216,18 +192,53 @@ const Dashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="projects">
+          <TabsContent value="schedule">
             <Card>
               <CardHeader>
-                <CardTitle>Aktive Projekte</CardTitle>
+                <CardTitle>Wöchentlicher Schichtplan</CardTitle>
                 <CardDescription>
-                  Ihre aktuellen Projekte und Aufgaben
+                  Ihre geplanten Schichten für diese Woche
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-4" />
-                  <p>Projektübersicht wird geladen...</p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-7 gap-2 text-center">
+                    {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day, index) => (
+                      <div key={day} className="p-2">
+                        <p className="font-medium text-sm">{day}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(Date.now() + index * 24 * 60 * 60 * 1000).getDate()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-2">
+                    {Array.from({ length: 7 }, (_, index) => (
+                      <div key={index} className="space-y-1">
+                        {index < 5 ? (
+                          <div className="bg-blue-100 text-blue-800 text-xs p-1 rounded text-center">
+                            Früh
+                          </div>
+                        ) : index === 5 ? (
+                          <div className="bg-orange-100 text-orange-800 text-xs p-1 rounded text-center">
+                            Spät
+                          </div>
+                        ) : (
+                          <div className="bg-gray-100 text-gray-600 text-xs p-1 rounded text-center">
+                            Frei
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    className="w-full" 
+                    onClick={() => navigate('/scheduling')}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Vollständigen Schichtplan anzeigen
+                  </Button>
                 </div>
               </CardContent>
             </Card>
