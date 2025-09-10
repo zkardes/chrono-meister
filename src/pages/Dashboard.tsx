@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Clock, Play, Pause, TrendingUp, Users, Calendar, FileText } from "lucide-react";
+import { Clock, Play, Pause, TrendingUp, Users, Calendar, FileText, AlertTriangle, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
@@ -14,6 +15,43 @@ const Dashboard = () => {
   const [isClocked, setIsClocked] = useState(false);
   const [workTime, setWorkTime] = useState(0);
   const userRole = localStorage.getItem("userRole");
+
+  // Sample overtime calculation (in hours)
+  const calculateOvertime = () => {
+    const standardWeeklyHours = 40; // Standard work week
+    const currentWeeklyHours = 42.5; // Current week hours
+    const overtime = Math.max(0, currentWeeklyHours - standardWeeklyHours);
+    return overtime;
+  };
+
+  // Sample unassigned shifts data
+  const getUnassignedShifts = () => {
+    const today = new Date();
+    const nextWeek = [];
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      nextWeek.push({
+        date: date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }),
+        shifts: [
+          { id: `morning-${i}`, name: 'Frühschicht', time: '06:00 - 14:00', assigned: i === 0 || i === 2 },
+          { id: `afternoon-${i}`, name: 'Spätschicht', time: '14:00 - 22:00', assigned: i === 1 || i === 3 || i === 4 },
+          { id: `night-${i}`, name: 'Nachtschicht', time: '22:00 - 06:00', assigned: i === 0 || i === 6 }
+        ]
+      });
+    }
+    return nextWeek;
+  };
+
+  const unassignedShifts = getUnassignedShifts()
+    .flatMap(day => 
+      day.shifts
+        .filter(shift => !shift.assigned)
+        .map(shift => ({ ...shift, date: day.date }))
+    );
+
+  const overtimeHours = calculateOvertime();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -56,10 +94,10 @@ const Dashboard = () => {
       color: "text-primary",
     },
     {
-      title: "Wochenstunden",
-      value: "32.5h",
-      icon: TrendingUp,
-      color: "text-success",
+      title: userRole === "admin" ? "Unbesetzte Schichten" : "Überstunden",
+      value: userRole === "admin" ? unassignedShifts.length.toString() : `${overtimeHours}h`,
+      icon: userRole === "admin" ? AlertTriangle : Timer,
+      color: userRole === "admin" ? (unassignedShifts.length > 0 ? "text-warning" : "text-success") : (overtimeHours > 0 ? "text-warning" : "text-success"),
     },
     {
       title: "Team Mitglieder",
@@ -158,6 +196,87 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
+              <Card>
+                <CardHeader>
+                  <CardTitle>{userRole === "admin" ? "Unbesetzte Schichten" : "Überstunden-Tracking"}</CardTitle>
+                  <CardDescription>
+                    {userRole === "admin" ? "Schichten, die noch Personal benötigen" : "Ihre Überstunden für diese Woche"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {userRole === "admin" ? (
+                    <div className="space-y-3">
+                      {unassignedShifts.length === 0 ? (
+                        <div className="text-center py-4">
+                          <div className="text-green-600 mb-2">
+                            <Users className="h-8 w-8 mx-auto" />
+                          </div>
+                          <p className="text-sm text-muted-foreground">Alle Schichten sind besetzt! 🎉</p>
+                        </div>
+                      ) : (
+                        unassignedShifts.slice(0, 5).map((shift, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                            <div>
+                              <p className="font-medium text-orange-800">{shift.name}</p>
+                              <p className="text-sm text-orange-600">{shift.date} • {shift.time}</p>
+                            </div>
+                            <Badge variant="outline" className="text-orange-700 border-orange-300">
+                              Unbesetzt
+                            </Badge>
+                          </div>
+                        ))
+                      )}
+                      {unassignedShifts.length > 5 && (
+                        <p className="text-sm text-muted-foreground text-center pt-2">
+                          +{unassignedShifts.length - 5} weitere unbesetzte Schichten
+                        </p>
+                      )}
+                      {unassignedShifts.length > 0 && (
+                        <Button 
+                          variant="outline" 
+                          className="w-full mt-3" 
+                          onClick={() => navigate('/scheduling')}
+                        >
+                          <AlertTriangle className="mr-2 h-4 w-4" />
+                          Schichten zuweisen
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="text-center p-4 bg-slate-50 rounded-lg">
+                        <Timer className={`h-8 w-8 mx-auto mb-2 ${overtimeHours > 0 ? 'text-warning' : 'text-success'}`} />
+                        <p className="text-2xl font-bold">{overtimeHours}h</p>
+                        <p className="text-sm text-muted-foreground">Überstunden diese Woche</p>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Sollstunden:</span>
+                          <span>40h</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Ist-Stunden:</span>
+                          <span>42.5h</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-medium">
+                          <span className="text-muted-foreground">Überstunden:</span>
+                          <span className={overtimeHours > 0 ? 'text-warning' : 'text-success'}>
+                            {overtimeHours > 0 ? '+' : ''}{overtimeHours}h
+                          </span>
+                        </div>
+                      </div>
+                      {overtimeHours > 0 && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                          <p className="text-sm text-yellow-800">
+                            💡 Tipp: Sprechen Sie mit Ihrem Manager über Freizeitausgleich
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
              
             </div>
           </TabsContent>
@@ -192,7 +311,7 @@ const Dashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="schedule">
+<TabsContent value="schedule">
             <Card>
               <CardHeader>
                 <CardTitle>Wöchentlicher Schichtplan</CardTitle>

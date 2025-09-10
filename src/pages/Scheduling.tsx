@@ -49,6 +49,10 @@ const Scheduling = () => {
   const [slotForm, setSlotForm] = useState({ name: '', startTime: '', endTime: '', color: 'bg-blue-500/10 text-blue-700 border-blue-500/20' });
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
   const [scheduleAssignments, setScheduleAssignments] = useState<Record<string, Record<string, number[]>>>({});
+  
+  // Get user role and current user ID
+  const userRole = localStorage.getItem("userRole") || "employee";
+  const currentUserId = parseInt(localStorage.getItem("currentUserId") || "1"); // Default to user ID 1 for demo
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
@@ -141,7 +145,12 @@ const Scheduling = () => {
     
     const employees = employeeIds.map(id => allEmployees.find(emp => emp.id === id)).filter(Boolean) as Employee[];
     
-    // Filter by selected group
+    // For employees: only show themselves
+    if (userRole === "employee") {
+      return employees.filter(emp => emp.id === currentUserId);
+    }
+    
+    // For admins: filter by selected group
     if (selectedGroup === "all") {
       return employees;
     }
@@ -154,11 +163,60 @@ const Scheduling = () => {
     return employees.filter(emp => group.memberIds.includes(emp.id));
   };
 
+  // Check if a slot has any assignments (for employee view)
+  const hasEmployeeAssignment = (day: Date, shiftId: string): boolean => {
+    const dateKey = format(day, "yyyy-MM-dd");
+    const employeeIds = scheduleAssignments[dateKey]?.[shiftId] || sampleScheduleData[dateKey]?.[shiftId] || [];
+    return employeeIds.includes(currentUserId);
+  };
+
+  // Employee can only request to be removed from their shifts
+  const handleEmployeeShiftChange = (day: Date, shift: string) => {
+    if (userRole !== "employee") return;
+    
+    const hasAssignment = hasEmployeeAssignment(day, shift);
+    const actionText = hasAssignment ? "abmelden" : "anmelden";
+    const confirmText = hasAssignment 
+      ? "Möchten Sie sich von dieser Schicht abmelden?" 
+      : "Möchten Sie sich für diese Schicht anmelden?";
+    
+    if (window.confirm(confirmText)) {
+      const dateKey = format(day, "yyyy-MM-dd");
+      
+      setScheduleAssignments(prev => {
+        const currentAssignments = prev[dateKey]?.[shift] || sampleScheduleData[dateKey]?.[shift] || [];
+        const updatedAssignments = hasAssignment
+          ? currentAssignments.filter(id => id !== currentUserId)
+          : [...currentAssignments, currentUserId];
+        
+        return {
+          ...prev,
+          [dateKey]: {
+            ...prev[dateKey],
+            [shift]: updatedAssignments
+          }
+        };
+      });
+      
+      toast({
+        title: hasAssignment ? "Abgemeldet" : "Angemeldet",
+        description: `Sie wurden erfolgreich von der Schicht ${hasAssignment ? 'ab' : 'an'}gemeldet.`,
+      });
+    }
+  };
+
   const navigateWeek = (direction: "prev" | "next") => {
     setCurrentWeek(direction === "next" ? addWeeks(currentWeek, 1) : subWeeks(currentWeek, 1));
   };
 
   const handleAssignEmployee = (day: Date, shift: string) => {
+    // Employee can only manage their own shifts
+    if (userRole === "employee") {
+      handleEmployeeShiftChange(day, shift);
+      return;
+    }
+    
+    // Admin functionality
     setSelectedSlot({ day, shift });
     setSelectedEmployees([]);
     setShowAssignDialog(true);
@@ -202,6 +260,16 @@ const Scheduling = () => {
   };
 
   const removeEmployeeFromSlot = (day: Date, shiftId: string, employeeId: number) => {
+    // Employees can only remove themselves
+    if (userRole === "employee" && employeeId !== currentUserId) {
+      toast({
+        title: "Keine Berechtigung",
+        description: "Sie können nur Ihre eigenen Schichten ändern.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const dateKey = format(day, "yyyy-MM-dd");
     
     setScheduleAssignments(prev => {
@@ -219,7 +287,7 @@ const Scheduling = () => {
 
     toast({
       title: "Mitarbeiter entfernt",
-      description: "Der Mitarbeiter wurde von der Schicht entfernt.",
+      description: userRole === "employee" ? "Sie wurden von der Schicht abgemeldet." : "Der Mitarbeiter wurde von der Schicht entfernt.",
     });
   };
 
@@ -295,28 +363,34 @@ const Scheduling = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold">Schichtplanung</h1>
-            <p className="text-muted-foreground">Planen Sie Arbeitsschichten für Ihre Teams</p>
+            <p className="text-muted-foreground">
+              {userRole === "admin" ? "Planen Sie Arbeitsschichten für Ihre Teams" : "Ihre persönlichen Schichtpläne"}
+            </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowSlotManager(true)}>
-              <Settings className="mr-2 h-4 w-4" />
-              Zeitslots verwalten
-            </Button>
-            <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Gruppe wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {groups.map((group) => (
-                  <SelectItem key={group.id} value={group.id}>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      {group.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {userRole === "admin" && (
+              <Button variant="outline" onClick={() => setShowSlotManager(true)}>
+                <Settings className="mr-2 h-4 w-4" />
+                Zeitslots verwalten
+              </Button>
+            )}
+            {userRole === "admin" && (
+              <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Gruppe wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {groups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        {group.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
 
@@ -327,7 +401,8 @@ const Scheduling = () => {
                 <CardTitle>Wochenansicht</CardTitle>
                 <CardDescription>
                   {format(weekStart, "dd. MMM", { locale: de })} - {format(weekEnd, "dd. MMM yyyy", { locale: de })}
-                  {selectedGroup !== "all" && ` • ${groups.find(g => g.id === selectedGroup)?.name}`}
+                  {userRole === "admin" && selectedGroup !== "all" && ` • ${groups.find(g => g.id === selectedGroup)?.name}`}
+                  {userRole === "employee" && ` • Ihre persönlichen Schichten`}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -382,31 +457,46 @@ const Scheduling = () => {
                       return (
                         <div
                           key={day.toISOString()}
-                          className={`border rounded-lg p-2 min-h-[80px] hover:bg-muted/50 cursor-pointer transition-colors ${slot.color}`}
+                          className={`border rounded-lg p-2 min-h-[80px] transition-colors ${
+                            userRole === "employee" 
+                              ? (hasEmployeeAssignment(day, slot.id) 
+                                  ? `${slot.color} cursor-pointer hover:bg-muted/50` 
+                                  : 'bg-gray-50 border-gray-200 cursor-pointer hover:bg-gray-100')
+                              : `${slot.color} cursor-pointer hover:bg-muted/50`
+                          }`}
                           onClick={() => handleAssignEmployee(day, slot.id)}
                         >
                           <div className="space-y-1">
-                            {employees.map((employee) => (
-                              <div key={employee.id} className="flex items-center justify-between">
-                                <Badge variant="secondary" className="text-xs flex-1 mr-1">
-                                  {formatEmployeeName(employee)}
-                                </Badge>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-4 w-4 p-0 opacity-50 hover:opacity-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    removeEmployeeFromSlot(day, slot.id, employee.id);
-                                  }}
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            ))}
-                            {employees.length === 0 && (
+                            {employees.length > 0 ? (
+                              employees.map((employee) => (
+                                <div key={employee.id} className="flex items-center justify-between">
+                                  <Badge variant="secondary" className="text-xs flex-1 mr-1">
+                                    {userRole === "employee" ? "Ihre Schicht" : formatEmployeeName(employee)}
+                                  </Badge>
+                                  {(userRole === "admin" || (userRole === "employee" && employee.id === currentUserId)) && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-4 w-4 p-0 opacity-50 hover:opacity-100"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeEmployeeFromSlot(day, slot.id, employee.id);
+                                      }}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
                               <div className="flex items-center justify-center h-[60px]">
-                                <Plus className="h-4 w-4 text-muted-foreground" />
+                                {userRole === "employee" ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    Klicken zum Anmelden
+                                  </span>
+                                ) : (
+                                  <Plus className="h-4 w-4 text-muted-foreground" />
+                                )}
                               </div>
                             )}
                           </div>
@@ -434,8 +524,8 @@ const Scheduling = () => {
           </CardContent>
         </Card>
 
-        {/* Assign Employee Dialog */}
-        {showAssignDialog && selectedSlot && (
+        {/* Assign Employee Dialog - Admin Only */}
+        {showAssignDialog && selectedSlot && userRole === "admin" && (
           <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
@@ -515,111 +605,115 @@ const Scheduling = () => {
           </Dialog>
         )}
 
-        {/* Slot Manager Dialog */}
-        <Dialog open={showSlotManager} onOpenChange={setShowSlotManager}>
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>Zeitslots verwalten</DialogTitle>
-              <DialogDescription>
-                Erstellen, bearbeiten und löschen Sie Zeitslots für die Schichtplanung
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <Button onClick={handleCreateSlot}>
-                <Plus className="mr-2 h-4 w-4" />
-                Neuen Zeitslot erstellen
-              </Button>
-              <div className="grid gap-4">
-                {sortedTimeSlots.map((slot) => (
-                  <div key={slot.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-6 h-6 rounded border ${slot.color}`} />
-                      <div>
-                        <h4 className="font-medium">{slot.name}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {slot.startTime} - {slot.endTime}
-                        </p>
+        {/* Slot Manager Dialog - Admin Only */}
+        {showSlotManager && userRole === "admin" && (
+          <Dialog open={showSlotManager} onOpenChange={setShowSlotManager}>
+            <DialogContent className="max-w-4xl">
+              <DialogHeader>
+                <DialogTitle>Zeitslots verwalten</DialogTitle>
+                <DialogDescription>
+                  Erstellen, bearbeiten und löschen Sie Zeitslots für die Schichtplanung
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <Button onClick={handleCreateSlot}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Neuen Zeitslot erstellen
+                </Button>
+                <div className="grid gap-4">
+                  {sortedTimeSlots.map((slot) => (
+                    <div key={slot.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-6 h-6 rounded border ${slot.color}`} />
+                        <div>
+                          <h4 className="font-medium">{slot.name}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {slot.startTime} - {slot.endTime}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleEditSlot(slot)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleDeleteSlot(slot.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleEditSlot(slot)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleDeleteSlot(slot.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        )}
 
-        {/* Create/Edit Slot Dialog */}
-        <Dialog open={showSlotDialog} onOpenChange={setShowSlotDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editingSlot ? 'Zeitslot bearbeiten' : 'Neuen Zeitslot erstellen'}</DialogTitle>
-              <DialogDescription>
-                {editingSlot ? 'Bearbeiten Sie die Eigenschaften des Zeitslots' : 'Erstellen Sie einen neuen Zeitslot für die Schichtplanung'}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input
-                  placeholder="z.B. Vormittagsschicht"
-                  value={slotForm.name}
-                  onChange={(e) => setSlotForm(prev => ({ ...prev, name: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+        {/* Create/Edit Slot Dialog - Admin Only */}
+        {showSlotDialog && userRole === "admin" && (
+          <Dialog open={showSlotDialog} onOpenChange={setShowSlotDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingSlot ? 'Zeitslot bearbeiten' : 'Neuen Zeitslot erstellen'}</DialogTitle>
+                <DialogDescription>
+                  {editingSlot ? 'Bearbeiten Sie die Eigenschaften des Zeitslots' : 'Erstellen Sie einen neuen Zeitslot für die Schichtplanung'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Startzeit</Label>
+                  <Label>Name</Label>
                   <Input
-                    type="time"
-                    value={slotForm.startTime}
-                    onChange={(e) => setSlotForm(prev => ({ ...prev, startTime: e.target.value }))}
+                    placeholder="z.B. Vormittagsschicht"
+                    value={slotForm.name}
+                    onChange={(e) => setSlotForm(prev => ({ ...prev, name: e.target.value }))}
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Startzeit</Label>
+                    <Input
+                      type="time"
+                      value={slotForm.startTime}
+                      onChange={(e) => setSlotForm(prev => ({ ...prev, startTime: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Endzeit</Label>
+                    <Input
+                      type="time"
+                      value={slotForm.endTime}
+                      onChange={(e) => setSlotForm(prev => ({ ...prev, endTime: e.target.value }))}
+                    />
+                  </div>
+                </div>
                 <div className="space-y-2">
-                  <Label>Endzeit</Label>
-                  <Input
-                    type="time"
-                    value={slotForm.endTime}
-                    onChange={(e) => setSlotForm(prev => ({ ...prev, endTime: e.target.value }))}
-                  />
+                  <Label>Farbe</Label>
+                  <Select value={slotForm.color} onValueChange={(value) => setSlotForm(prev => ({ ...prev, color: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {colorOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-4 h-4 rounded border ${option.value}`} />
+                            {option.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Farbe</Label>
-                <Select value={slotForm.color} onValueChange={(value) => setSlotForm(prev => ({ ...prev, color: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {colorOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        <div className="flex items-center gap-2">
-                          <div className={`w-4 h-4 rounded border ${option.value}`} />
-                          {option.label}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowSlotDialog(false)}>Abbrechen</Button>
-              <Button onClick={handleSaveSlot}>
-                <Clock className="mr-2 h-4 w-4" />
-                {editingSlot ? 'Aktualisieren' : 'Erstellen'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowSlotDialog(false)}>Abbrechen</Button>
+                <Button onClick={handleSaveSlot}>
+                  <Clock className="mr-2 h-4 w-4" />
+                  {editingSlot ? 'Aktualisieren' : 'Erstellen'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </DashboardLayout>
   );
