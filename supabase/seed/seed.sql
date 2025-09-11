@@ -7,6 +7,21 @@ INSERT INTO employees (id, email, first_name, last_name, employee_id, department
   ('44444444-4444-4444-4444-444444444444', 'sarah.wilson@company.com', 'Sarah', 'Wilson', 'EMP004', 'Engineering', 'Team Lead', '2021-09-15', 65.00),
   ('55555555-5555-5555-5555-555555555555', 'david.brown@company.com', 'David', 'Brown', 'EMP005', 'QA', 'QA Engineer', '2023-02-20', 38.00);
 
+-- Insert sample user profiles (these would normally be created by the auth trigger)
+-- Note: In a real scenario, these users would sign up through the registration form
+-- and the user_profiles would be automatically created by the trigger
+INSERT INTO user_profiles (id, employee_id, role) VALUES
+  ('aaaaaaaa-bbbb-cccc-dddd-111111111111', '11111111-1111-1111-1111-111111111111', 'employee'),
+  ('aaaaaaaa-bbbb-cccc-dddd-222222222222', '22222222-2222-2222-2222-222222222222', 'admin'),
+  ('aaaaaaaa-bbbb-cccc-dddd-333333333333', '33333333-3333-3333-3333-333333333333', 'employee'),
+  ('aaaaaaaa-bbbb-cccc-dddd-444444444444', '44444444-4444-4444-4444-444444444444', 'manager');
+
+-- Update employees with auth_user_id to show the linking
+UPDATE employees SET auth_user_id = 'aaaaaaaa-bbbb-cccc-dddd-111111111111' WHERE id = '11111111-1111-1111-1111-111111111111';
+UPDATE employees SET auth_user_id = 'aaaaaaaa-bbbb-cccc-dddd-222222222222' WHERE id = '22222222-2222-2222-2222-222222222222';
+UPDATE employees SET auth_user_id = 'aaaaaaaa-bbbb-cccc-dddd-333333333333' WHERE id = '33333333-3333-3333-3333-333333333333';
+UPDATE employees SET auth_user_id = 'aaaaaaaa-bbbb-cccc-dddd-444444444444' WHERE id = '44444444-4444-4444-4444-444444444444';
+
 -- Insert sample groups
 INSERT INTO groups (id, name, description, manager_id) VALUES
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Frontend Team', 'Responsible for user interface development', '44444444-4444-4444-4444-444444444444'),

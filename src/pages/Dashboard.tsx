@@ -5,16 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import DashboardLayout from "@/components/DashboardLayout";
+import UserProfile from "@/components/UserProfile";
+import { useAuthContext } from "@/contexts/AuthContext";
 import { Clock, Play, Pause, TrendingUp, Users, Calendar, FileText, AlertTriangle, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, employee, isAdmin, isManager } = useAuthContext();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isClocked, setIsClocked] = useState(false);
   const [workTime, setWorkTime] = useState(0);
-  const userRole = localStorage.getItem("userRole");
 
   // Sample overtime calculation (in hours)
   const calculateOvertime = () => {
@@ -94,20 +96,20 @@ const Dashboard = () => {
       color: "text-primary",
     },
     {
-      title: userRole === "admin" ? "Unbesetzte Schichten" : "Überstunden",
-      value: userRole === "admin" ? unassignedShifts.length.toString() : `${overtimeHours}h`,
-      icon: userRole === "admin" ? AlertTriangle : Timer,
-      color: userRole === "admin" ? (unassignedShifts.length > 0 ? "text-warning" : "text-success") : (overtimeHours > 0 ? "text-warning" : "text-success"),
+      title: isAdmin ? "Unbesetzte Schichten" : "Überstunden",
+      value: isAdmin ? unassignedShifts.length.toString() : `${overtimeHours}h`,
+      icon: isAdmin ? AlertTriangle : Timer,
+      color: isAdmin ? (unassignedShifts.length > 0 ? "text-warning" : "text-success") : (overtimeHours > 0 ? "text-warning" : "text-success"),
     },
     {
       title: "Team Mitglieder",
-      value: userRole === "admin" ? "12" : "4",
+      value: isAdmin ? "12" : "4",
       icon: Users,
       color: "text-accent",
     },
     {
       title: "Offene Urlaubsanträge",
-      value: userRole === "admin" ? "3" : "1",
+      value: isAdmin ? "3" : "1",
       icon: Calendar,
       color: "text-warning",
     },
@@ -129,7 +131,7 @@ const Dashboard = () => {
           <div>
             <h1 className="text-3xl font-bold">Dashboard</h1>
             <p className="text-muted-foreground">
-              Willkommen zurück! Heute ist {currentTime.toLocaleDateString('de-DE', { 
+              Welcome back{employee ? `, ${employee.first_name}` : ''}! Today is {currentTime.toLocaleDateString('en-US', { 
                 weekday: 'long', 
                 year: 'numeric', 
                 month: 'long', 
@@ -176,11 +178,11 @@ const Dashboard = () => {
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
             <TabsTrigger value="activities">Aktivitäten</TabsTrigger>
             <TabsTrigger value="schedule">Schichtplan</TabsTrigger>
-            {userRole === "admin" && <TabsTrigger value="team">Team</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="team">Team</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <Card>
                 <CardHeader>
                   <CardTitle>Wochenübersicht</CardTitle>
@@ -198,13 +200,13 @@ const Dashboard = () => {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>{userRole === "admin" ? "Unbesetzte Schichten" : "Überstunden-Tracking"}</CardTitle>
+                  <CardTitle>{isAdmin ? "Unbesetzte Schichten" : "Überstunden-Tracking"}</CardTitle>
                   <CardDescription>
-                    {userRole === "admin" ? "Schichten, die noch Personal benötigen" : "Ihre Überstunden für diese Woche"}
+                    {isAdmin ? "Schichten, die noch Personal benötigen" : "Ihre Überstunden für diese Woche"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {userRole === "admin" ? (
+                  {isAdmin ? (
                     <div className="space-y-3">
                       {unassignedShifts.length === 0 ? (
                         <div className="text-center py-4">
@@ -277,6 +279,10 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
+              {/* User Profile Component */}
+              <div className="lg:row-span-2">
+                <UserProfile />
+              </div>
              
             </div>
           </TabsContent>
@@ -363,7 +369,7 @@ const Dashboard = () => {
             </Card>
           </TabsContent>
 
-          {userRole === "admin" && (
+          {isAdmin && (
             <TabsContent value="team">
               <Card>
                 <CardHeader>
