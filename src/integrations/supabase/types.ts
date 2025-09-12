@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          address: string | null
+          created_at: string | null
+          domain: string | null
+          email: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          phone: string | null
+          settings: Json | null
+          slug: string
+          timezone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string | null
+          domain?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          phone?: string | null
+          settings?: Json | null
+          slug: string
+          timezone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string | null
+          domain?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          phone?: string | null
+          settings?: Json | null
+          slug?: string
+          timezone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       employee_groups: {
         Row: {
           created_at: string | null
@@ -53,6 +98,7 @@ export type Database = {
       employees: {
         Row: {
           auth_user_id: string | null
+          company_id: string | null
           created_at: string | null
           department: string | null
           email: string
@@ -68,6 +114,7 @@ export type Database = {
         }
         Insert: {
           auth_user_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           department?: string | null
           email: string
@@ -83,6 +130,7 @@ export type Database = {
         }
         Update: {
           auth_user_id?: string | null
+          company_id?: string | null
           created_at?: string | null
           department?: string | null
           email?: string
@@ -96,10 +144,19 @@ export type Database = {
           position?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "employees_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       groups: {
         Row: {
+          company_id: string | null
           created_at: string | null
           description: string | null
           id: string
@@ -108,6 +165,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -116,6 +174,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -124,6 +183,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "groups_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "groups_manager_id_fkey"
             columns: ["manager_id"]
@@ -247,6 +313,7 @@ export type Database = {
       user_profiles: {
         Row: {
           avatar_url: string | null
+          company_id: string | null
           created_at: string | null
           employee_id: string | null
           id: string
@@ -256,6 +323,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          company_id?: string | null
           created_at?: string | null
           employee_id?: string | null
           id: string
@@ -265,6 +333,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          company_id?: string | null
           created_at?: string | null
           employee_id?: string | null
           id?: string
@@ -273,6 +342,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "user_profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_profiles_employee_id_fkey"
             columns: ["employee_id"]
@@ -348,6 +424,10 @@ export type Database = {
     }
     Functions: {
       get_current_employee: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      get_current_user_company: {
         Args: Record<PropertyKey, never>
         Returns: string
       }

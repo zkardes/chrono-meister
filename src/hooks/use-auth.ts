@@ -5,11 +5,13 @@ import { Tables } from '@/integrations/supabase/types';
 
 export type UserProfile = Tables<'user_profiles'>;
 export type Employee = Tables<'employees'>;
+export type Company = Tables<'companies'>;
 
 export interface AuthUser {
   user: User | null;
   profile: UserProfile | null;
   employee: Employee | null;
+  company: Company | null;
   loading: boolean;
 }
 
@@ -18,6 +20,7 @@ export const useAuth = () => {
     user: null,
     profile: null,
     employee: null,
+    company: null,
     loading: true,
   });
 
@@ -45,6 +48,7 @@ export const useAuth = () => {
             user: null,
             profile: null,
             employee: null,
+            company: null,
             loading: false,
           });
         }
@@ -74,10 +78,22 @@ export const useAuth = () => {
         employee = employeeData;
       }
 
+      // Get company data if profile exists and has company_id
+      let company = null;
+      if (profile?.company_id) {
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('id', profile.company_id)
+          .single();
+        company = companyData;
+      }
+
       setAuthState({
         user,
         profile,
         employee,
+        company,
         loading: false,
       });
     } catch (error) {

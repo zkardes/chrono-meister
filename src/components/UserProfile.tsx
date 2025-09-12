@@ -5,10 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, Building, Mail, Calendar, DollarSign } from 'lucide-react';
+import { LogOut, User, Building, Mail, Calendar, DollarSign, Building2 } from 'lucide-react';
 
 const UserProfile = () => {
-  const { user, profile, employee, isAuthenticated, isAdmin, isManager } = useAuthContext();
+  const { user, profile, employee, company, isAuthenticated, isAdmin, isManager } = useAuthContext();
   const { signOut } = useAuthActions();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -60,6 +60,29 @@ const UserProfile = () => {
             </Badge>
           </div>
         </div>
+
+        {/* Company Information */}
+        {company && (
+          <>
+            <hr />
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Company
+              </h4>
+              
+              <div className="space-y-1">
+                <p className="font-medium">{company.name}</p>
+                {company.domain && (
+                  <p className="text-xs text-muted-foreground">{company.domain}</p>
+                )}
+                {company.timezone && (
+                  <p className="text-xs text-muted-foreground">Timezone: {company.timezone}</p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Employee Information */}
         {employee && (

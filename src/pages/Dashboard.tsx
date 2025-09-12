@@ -7,13 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import DashboardLayout from "@/components/DashboardLayout";
 import UserProfile from "@/components/UserProfile";
 import { useAuthContext } from "@/contexts/AuthContext";
+import { useCompanyEmployees } from "@/hooks/use-company-data";
 import { Clock, Play, Pause, TrendingUp, Users, Calendar, FileText, AlertTriangle, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, employee, isAdmin, isManager } = useAuthContext();
+  const { user, employee, company, isAdmin, isManager } = useAuthContext();
+  const { data: companyEmployees = [] } = useCompanyEmployees();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isClocked, setIsClocked] = useState(false);
   const [workTime, setWorkTime] = useState(0);
@@ -103,7 +105,7 @@ const Dashboard = () => {
     },
     {
       title: "Team Mitglieder",
-      value: isAdmin ? "12" : "4",
+      value: companyEmployees.length.toString(),
       icon: Users,
       color: "text-accent",
     },
@@ -129,7 +131,9 @@ const Dashboard = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <h1 className="text-3xl font-bold">
+              Dashboard{company ? ` - ${company.name}` : ''}
+            </h1>
             <p className="text-muted-foreground">
               Welcome back{employee ? `, ${employee.first_name}` : ''}! Today is {currentTime.toLocaleDateString('en-US', { 
                 weekday: 'long', 

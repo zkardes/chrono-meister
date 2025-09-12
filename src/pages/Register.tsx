@@ -144,6 +144,7 @@ const Register = () => {
               />
               <p className="text-xs text-muted-foreground">
                 If you have an existing employee record, enter your employee ID to link accounts.
+                Your company will be automatically assigned based on your email domain.
               </p>
             </div>
             

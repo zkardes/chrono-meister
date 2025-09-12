@@ -1,7 +1,11 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import { useAuth, AuthUser } from '@/hooks/use-auth';
+import { Tables } from '@/integrations/supabase/types';
+
+type Company = Tables<'companies'>;
 
 interface AuthContextType extends AuthUser {
+  company: Company | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isManager: boolean;
@@ -30,6 +34,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const value: AuthContextType = {
     ...authState,
+    company: authState.company,
     isAuthenticated,
     isAdmin,
     isManager,
