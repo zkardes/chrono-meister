@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Building, Mail, Calendar, DollarSign, Building2 } from 'lucide-react';
+import { getFullEmployeeName } from '@/lib/employee-utils';
 
 const UserProfile = () => {
   const { user, profile, employee, company, isAuthenticated, isAdmin, isManager } = useAuthContext();
@@ -94,7 +95,7 @@ const UserProfile = () => {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Name:</span>
-                  <p>{employee.first_name} {employee.last_name}</p>
+                  <p>{getFullEmployeeName(employee)}</p>
                 </div>
                 
                 <div>

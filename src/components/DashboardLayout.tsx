@@ -25,6 +25,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { useAuthActions } from "@/hooks/use-auth";
+import { formatEmployeeName, getEmployeeInitials } from "@/lib/employee-utils";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -35,15 +38,26 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
   const { toast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const userRole = localStorage.getItem("userRole");
+  
+  // Get actual user data from auth context
+  const { user, employee, profile, isAdmin, isManager } = useAuthContext();
+  const { signOut } = useAuthActions();
 
-  const handleLogout = () => {
-    localStorage.removeItem("userRole");
-    toast({
-      title: "Abgemeldet",
-      description: "Sie wurden erfolgreich abgemeldet.",
-    });
-    navigate("/login");
+  const handleLogout = async () => {
+    const result = await signOut();
+    if (result.success) {
+      toast({
+        title: "Abgemeldet",
+        description: "Sie wurden erfolgreich abgemeldet.",
+      });
+      navigate("/login");
+    } else {
+      toast({
+        title: "Fehler beim Abmelden",
+        description: "Es ist ein Fehler aufgetreten.",
+        variant: "destructive",
+      });
+    }
   };
 
   const navigation = [
@@ -59,7 +73,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     { name: "Einstellungen", href: "/settings", icon: Settings },
   ];
 
-  const allNavigation = userRole === "admin" 
+  const allNavigation = (isAdmin || isManager)
     ? [...navigation, ...adminNavigation]
     : navigation;
 
@@ -120,15 +134,15 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             <div className="flex items-center gap-3">
               <Avatar>
                 <AvatarFallback>
-                  {userRole === "admin" ? "AD" : "MA"}
+                  {getEmployeeInitials(employee, isAdmin, user?.email)}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">
-                  {userRole === "admin" ? "Admin User" : "Mitarbeiter"}
+                  {formatEmployeeName(employee, user?.email)}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {userRole === "admin" ? "admin@demo.de" : "user@demo.de"}
+                  {user?.email || 'user@demo.de'}
                 </p>
               </div>
             </div>
@@ -157,11 +171,11 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
               <Button variant="ghost" className="flex items-center gap-2">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback>
-                    {userRole === "admin" ? "AD" : "MA"}
+                    {getEmployeeInitials(employee, isAdmin, user?.email)}
                   </AvatarFallback>
                 </Avatar>
                 <span className="hidden md:block">
-                  {userRole === "admin" ? "Admin" : "Mitarbeiter"}
+                  {formatEmployeeName(employee, user?.email)}
                 </span>
                 <ChevronDown className="h-4 w-4" />
               </Button>

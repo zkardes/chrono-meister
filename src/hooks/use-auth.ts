@@ -25,14 +25,36 @@ export const useAuth = () => {
   });
 
   useEffect(() => {
+    let mounted = true;
+    
     // Get initial session
     const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        await loadUserData(session.user);
-      } else {
-        setAuthState(prev => ({ ...prev, loading: false }));
+      try {
+        console.log('🔍 Getting initial session...');
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('❌ Session error:', error);
+          if (mounted) {
+            setAuthState(prev => ({ ...prev, loading: false }));
+          }
+          return;
+        }
+        
+        if (session?.user && mounted) {
+          console.log('✅ Session found, loading user data...');
+          await loadUserData(session.user);
+        } else {
+          console.log('ℹ️ No session found');
+          if (mounted) {
+            setAuthState(prev => ({ ...prev, loading: false }));
+          }
+        }
+      } catch (error) {
+        console.error('❌ Initial session error:', error);
+        if (mounted) {
+          setAuthState(prev => ({ ...prev, loading: false }));
+        }
       }
     };
 
@@ -41,6 +63,10 @@ export const useAuth = () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('🔄 Auth state change:', event, session?.user?.email);
+        
+        if (!mounted) return;
+        
         if (session?.user) {
           await loadUserData(session.user);
         } else {
@@ -55,38 +81,74 @@ export const useAuth = () => {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const loadUserData = async (user: User) => {
     try {
-      // Get user profile
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      console.log('📊 Loading user data for:', user.email);
+      
+      // Get user profile with retry logic
+      let profile = null;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries && !profile) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+          
+        if (profileError && profileError.code === 'PGRST116') {
+          // No profile found, wait a bit and retry (might be creating)
+          console.log(`⏳ Profile not found, retry ${retryCount + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          retryCount++;
+        } else if (profileError) {
+          console.error('❌ Profile error:', profileError);
+          break;
+        } else {
+          profile = profileData;
+          console.log('✅ Profile loaded');
+        }
+      }
 
       // Get employee data if profile exists and has employee_id
       let employee = null;
       if (profile?.employee_id) {
-        const { data: employeeData } = await supabase
+        const { data: employeeData, error: employeeError } = await supabase
           .from('employees')
           .select('*')
           .eq('id', profile.employee_id)
           .single();
-        employee = employeeData;
+          
+        if (employeeError) {
+          console.error('❌ Employee error:', employeeError);
+        } else {
+          employee = employeeData;
+          console.log('✅ Employee loaded');
+        }
       }
 
       // Get company data if profile exists and has company_id
       let company = null;
       if (profile?.company_id) {
-        const { data: companyData } = await supabase
+        const { data: companyData, error: companyError } = await supabase
           .from('companies')
           .select('*')
           .eq('id', profile.company_id)
           .single();
-        company = companyData;
+          
+        if (companyError) {
+          console.error('❌ Company error:', companyError);
+        } else {
+          company = companyData;
+          console.log('✅ Company loaded');
+        }
       }
 
       setAuthState({
@@ -96,8 +158,10 @@ export const useAuth = () => {
         company,
         loading: false,
       });
+      
+      console.log('✨ User data loading complete');
     } catch (error) {
-      console.error('Error loading user data:', error);
+      console.error('❌ Error loading user data:', error);
       setAuthState(prev => ({ ...prev, loading: false }));
     }
   };
@@ -111,14 +175,37 @@ export const useAuthActions = () => {
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     try {
+      console.log('🔑 Attempting sign in for:', email);
+      
+      // Clear any existing session first
+      await supabase.auth.signOut();
+      
+      // Short delay to ensure cleanup
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Sign in error:', error);
+        throw error;
+      }
+      
+      if (!data.session) {
+        console.error('❌ No session returned from sign in');
+        throw new Error('No session created');
+      }
+      
+      console.log('✅ Sign in successful:', {
+        user: data.user?.email,
+        sessionExists: !!data.session
+      });
+      
       return { success: true, data };
     } catch (error) {
+      console.error('❌ Sign in failed:', error);
       return { success: false, error: error as AuthError };
     } finally {
       setLoading(false);
@@ -133,23 +220,33 @@ export const useAuthActions = () => {
   }) => {
     setLoading(true);
     try {
+      console.log('🚀 Starting registration process for:', email);
+      console.log('📋 User data:', userData);
+      
       // First, validate company code if provided
       if (userData?.companyCode) {
+        console.log('🔍 Validating company code:', userData.companyCode);
+        
         const { data: company, error: companyError } = await supabase
           .from('companies')
-          .select('id')
+          .select('id, name, company_code')
           .eq('company_code', userData.companyCode)
           .eq('is_active', true)
           .single();
           
         if (companyError || !company) {
+          console.error('❌ Company validation failed:', companyError);
           return { 
             success: false, 
             error: { message: 'Invalid company code. Please check with your administrator.' } as AuthError 
           };
         }
+        
+        console.log('✅ Company validation successful:', company.name);
       }
 
+      console.log('📤 Sending registration request to Supabase...');
+      
       // Sign up the user - the database trigger will automatically create
       // the employee record and user_profile with company assignment
       const { data, error } = await supabase.auth.signUp({
@@ -160,10 +257,45 @@ export const useAuthActions = () => {
         },
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Supabase auth.signUp error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Registration successful:', {
+        user: data.user?.email,
+        confirmed: data.user?.email_confirmed_at ? 'Yes' : 'No',
+        sessionExists: !!data.session
+      });
+      
+      // If user is automatically confirmed (in development), log additional info
+      if (data.session) {
+        console.log('🎯 User automatically confirmed, checking profile creation...');
+        
+        // Give the trigger a moment to execute
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check if profile was created successfully
+        const { data: profile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', data.user?.id)
+          .single();
+          
+        if (profileError) {
+          console.warn('⚠️ Profile not found immediately after registration:', profileError.message);
+        } else {
+          console.log('✅ User profile created successfully:', {
+            hasCompany: !!profile.company_id,
+            hasEmployee: !!profile.employee_id,
+            role: profile.role
+          });
+        }
+      }
       
       return { success: true, data };
     } catch (error) {
+      console.error('❌ Registration failed:', error);
       return { success: false, error: error as AuthError };
     } finally {
       setLoading(false);

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthActions } from "@/hooks/use-auth";
 import { Clock, Eye, EyeOff, Mail } from "lucide-react";
+import { debugAuth } from "@/lib/debug-auth";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -30,15 +31,36 @@ const Login = () => {
       return;
     }
 
+    // Debug: Check auth state before login attempt
+    console.log('🔄 Starting login attempt...');
+    await debugAuth.checkSession();
+    await debugAuth.checkStorage();
+
     const result = await signIn(formData.email, formData.password);
     
     if (result.success) {
+      console.log('✅ Login successful');
+      
+      // Debug: Check auth state after successful login
+      setTimeout(async () => {
+        await debugAuth.checkSession();
+        await debugAuth.checkUser();
+      }, 1000);
+      
       toast({
         title: "Welcome back!",
         description: "You have been successfully logged in.",
       });
       navigate("/dashboard");
     } else {
+      console.error('❌ Login failed:', result.error);
+      
+      // Debug: Check auth state after failed login
+      setTimeout(async () => {
+        await debugAuth.checkSession();
+        await debugAuth.testConnection();
+      }, 500);
+      
       toast({
         title: "Login Failed",
         description: result.error?.message || "Please check your credentials.",
@@ -74,7 +96,7 @@ const Login = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="name@company.com"
+                  placeholder="name@domain.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required

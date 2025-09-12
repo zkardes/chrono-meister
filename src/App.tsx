@@ -17,6 +17,11 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
+// Import debug and test utilities for development
+import "@/lib/debug-auth";
+import "@/lib/auth-test-guide";
+import "@/lib/registration-debug";
+
 const queryClient = new QueryClient();
 
 const App = () => (
