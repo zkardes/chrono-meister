@@ -331,15 +331,15 @@ const Dashboard = () => {
   const stats = [
     {
       title: "Arbeitszeit heute",
-      value: formatTime(workTime),
+      value: formatMinutesToTime(todaysWorkMinutes),
       icon: Clock,
-      color: "text-primary",
+      color: activeEntry ? "text-green-600" : "text-primary",
     },
     {
-      title: isAdmin ? "Unbesetzte Schichten" : "Überstunden",
-      value: isAdmin ? unassignedShifts.length.toString() : `${overtimeHours}h`,
+      title: isAdmin ? "Unbesetzte Schichten" : "Überstunden (Woche)",
+      value: isAdmin ? unassignedShifts.length.toString() : formatMinutesToHours(overtimeMinutes),
       icon: isAdmin ? AlertTriangle : Timer,
-      color: isAdmin ? (unassignedShifts.length > 0 ? "text-warning" : "text-success") : (overtimeHours > 0 ? "text-warning" : "text-success"),
+      color: isAdmin ? (unassignedShifts.length > 0 ? "text-warning" : "text-success") : (overtimeMinutes > 0 ? "text-orange-600" : "text-success"),
     },
     {
       title: "Team Mitglieder",
@@ -385,14 +385,29 @@ const Dashboard = () => {
             <p className="text-2xl font-bold">
               {currentTime.toLocaleTimeString('de-DE')}
             </p>
+            {activeEntry && (
+              <p className="text-sm text-green-600 font-medium">
+                Aktiv seit {format(new Date(activeEntry.start_time), 'HH:mm')}
+              </p>
+            )}
             <Button
               size="lg"
-              variant={isClocked ? "destructive" : "success"}
+              variant={activeEntry ? "destructive" : "default"}
               onClick={handleClockToggle}
-              className="mt-2"
+              className={`mt-2 ${activeEntry ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+              disabled={loading}
             >
-              {isClocked ? <Pause className="mr-2" /> : <Play className="mr-2" />}
-              {isClocked ? "Ausstempeln" : "Einstempeln"}
+              {activeEntry ? (
+                <>
+                  <Square className="mr-2" />
+                  Ausstempeln
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2" />
+                  Einstempeln
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -433,10 +448,54 @@ const Dashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-                    <TrendingUp className="h-8 w-8 mr-2" />
-                    <span>Chart-Visualisierung folgt</span>
-                  </div>
+                  {loading ? (
+                    <div className="h-[200px] flex items-center justify-center">
+                      <Clock className="h-6 w-6 animate-spin mr-2" />
+                      <span>Lade Daten...</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4 text-center">
+                        <div className="p-3 bg-blue-50 rounded-lg">
+                          <p className="text-lg font-bold text-blue-700">
+                            {formatMinutesToHours(calculateWeeklyWorkTime())}
+                          </p>
+                          <p className="text-xs text-blue-600">Diese Woche</p>
+                        </div>
+                        <div className="p-3 bg-green-50 rounded-lg">
+                          <p className="text-lg font-bold text-green-700">
+                            {formatMinutesToHours(todaysWorkMinutes)}
+                          </p>
+                          <p className="text-xs text-green-600">Heute</p>
+                        </div>
+                      </div>
+                      
+                      {timeEntries.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Letzte Einträge:</p>
+                          {timeEntries.slice(0, 3).map((entry) => (
+                            <div key={entry.id} className="flex justify-between text-xs p-2 bg-gray-50 rounded">
+                              <span>
+                                {format(new Date(entry.start_time), 'dd.MM HH:mm', { locale: de })}
+                                {!entry.end_time && ' (aktiv)'}
+                              </span>
+                              <span className={!entry.end_time ? 'text-green-600 font-medium' : ''}>
+                                {entry.end_time ? 
+                                  formatMinutesToHours(calculateDurationInMinutes(entry.start_time, entry.end_time)) :
+                                  formatMinutesToHours(calculateDurationInMinutes(entry.start_time, null)) + ' (laufend)'
+                                }
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <TrendingUp className="h-8 w-8 mx-auto mb-2" />
+                          <p className="text-sm">Noch keine Zeiteinträge vorhanden</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -489,33 +548,71 @@ const Dashboard = () => {
                   ) : (
                     <div className="space-y-4">
                       <div className="text-center p-4 bg-slate-50 rounded-lg">
-                        <Timer className={`h-8 w-8 mx-auto mb-2 ${overtimeHours > 0 ? 'text-warning' : 'text-success'}`} />
-                        <p className="text-2xl font-bold">{overtimeHours}h</p>
+                        <Timer className={`h-8 w-8 mx-auto mb-2 ${overtimeMinutes > 0 ? 'text-orange-600' : 'text-success'}`} />
+                        <p className="text-2xl font-bold">{formatMinutesToHours(overtimeMinutes)}</p>
                         <p className="text-sm text-muted-foreground">Überstunden diese Woche</p>
+                        {activeEntry && (
+                          <div className="mt-2 p-2 bg-green-100 rounded">
+                            <p className="text-xs text-green-700">
+                              ⏱️ Aktive Sitzung: {formatMinutesToHours(calculateDurationInMinutes(activeEntry.start_time, null))}
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Sollstunden:</span>
-                          <span>40h</span>
+                          <span className="text-muted-foreground">Sollstunden (Woche):</span>
+                          <span>{EMPLOYEE_WORK_HOURS * 5}h</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Ist-Stunden:</span>
-                          <span>42.5h</span>
+                          <span className="text-muted-foreground">Ist-Stunden (Woche):</span>
+                          <span>{formatMinutesToHours(calculateWeeklyWorkTime())}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Heute gearbeitet:</span>
+                          <span className={activeEntry ? 'text-green-600 font-medium' : ''}>
+                            {formatMinutesToHours(todaysWorkMinutes)}
+                            {activeEntry && ' (laufend)'}
+                          </span>
                         </div>
                         <div className="flex justify-between text-sm font-medium">
                           <span className="text-muted-foreground">Überstunden:</span>
-                          <span className={overtimeHours > 0 ? 'text-warning' : 'text-success'}>
-                            {overtimeHours > 0 ? '+' : ''}{overtimeHours}h
+                          <span className={overtimeMinutes > 0 ? 'text-orange-600' : 'text-success'}>
+                            {overtimeMinutes > 0 ? '+' : ''}{formatMinutesToHours(overtimeMinutes)}
                           </span>
                         </div>
                       </div>
-                      {overtimeHours > 0 && (
+                      {overtimeMinutes > 0 && (
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                           <p className="text-sm text-yellow-800">
-                            💡 Tipp: Sprechen Sie mit Ihrem Manager über Freizeitausgleich
+                            💡 Tipp: {Math.floor(overtimeMinutes / EMPLOYEE_WORK_MINUTES)} Tag(e) Freizeitausgleich verfügbar
                           </p>
                         </div>
                       )}
+                      {activeEntry && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-green-800">Zeiterfassung aktiv</p>
+                              <p className="text-xs text-green-700">
+                                Gestartet: {format(new Date(activeEntry.start_time), 'dd.MM HH:mm', { locale: de })}
+                              </p>
+                              <p className="text-xs text-green-600">
+                                Projekt: {activeEntry.project || 'Nicht angegeben'}
+                              </p>
+                            </div>
+                            <Timer className="h-6 w-6 text-green-600 animate-pulse" />
+                          </div>
+                        </div>
+                      )}
+                      <Button 
+                        variant="outline" 
+                        className="w-full" 
+                        onClick={() => navigate('/time-tracking')}
+                      >
+                        <Clock className="mr-2 h-4 w-4" />
+                        Zur Zeiterfassung
+                      </Button>
                     </div>
                   )}
                 </CardContent>
