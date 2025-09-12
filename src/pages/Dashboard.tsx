@@ -8,8 +8,21 @@ import DashboardLayout from "@/components/DashboardLayout";
 import UserProfile from "@/components/UserProfile";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useCompanyEmployees } from "@/hooks/use-company-data";
-import { Clock, Play, Pause, TrendingUp, Users, Calendar, FileText, AlertTriangle, Timer } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Tables } from "@/integrations/supabase/types";
+import { Clock, Play, Pause, TrendingUp, Users, Calendar, FileText, AlertTriangle, Timer, Square } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { format, differenceInMinutes, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
+import { de } from "date-fns/locale";
+
+type TimeEntry = Tables<'time_entries'>;
+
+interface ActiveTimeEntry {
+  id: string;
+  start_time: string;
+  description?: string;
+  project?: string;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -17,15 +30,255 @@ const Dashboard = () => {
   const { user, employee, company, isAdmin, isManager } = useAuthContext();
   const { data: companyEmployees = [] } = useCompanyEmployees();
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [isClocked, setIsClocked] = useState(false);
-  const [workTime, setWorkTime] = useState(0);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [activeEntry, setActiveEntry] = useState<ActiveTimeEntry | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Sample overtime calculation (in hours)
-  const calculateOvertime = () => {
-    const standardWeeklyHours = 40; // Standard work week
-    const currentWeeklyHours = 42.5; // Current week hours
-    const overtime = Math.max(0, currentWeeklyHours - standardWeeklyHours);
-    return overtime;
+  const MINUTES_PER_HOUR = 60;
+  
+  // Get employee's configured work hours from Settings
+  const getEmployeeWorkHours = (): number => {
+    if (!employee?.id) return 8;
+    
+    const workHourSettings = localStorage.getItem("workHourSettings");
+    if (workHourSettings) {
+      const settings = JSON.parse(workHourSettings);
+      const employeeSetting = settings.find((setting: any) => setting.employeeId === employee.id);
+      if (employeeSetting) {
+        return employeeSetting.workHoursPerDay;
+      }
+    }
+    return 8; // Default
+  };
+  
+  const EMPLOYEE_WORK_HOURS = getEmployeeWorkHours();
+  const EMPLOYEE_WORK_MINUTES = EMPLOYEE_WORK_HOURS * MINUTES_PER_HOUR;
+
+  // Fetch time entries from Supabase
+  const fetchTimeEntries = async () => {
+    if (!employee?.id) return;
+    
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('time_entries')
+        .select('*')
+        .eq('employee_id', employee.id)
+        .order('start_time', { ascending: false })
+        .limit(100); // Get recent entries
+        
+      if (error) {
+        console.error('Error fetching time entries:', error);
+        return;
+      }
+      
+      setTimeEntries(data || []);
+    } catch (error) {
+      console.error('Error in fetchTimeEntries:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check for active time entry
+  const checkActiveEntry = async () => {
+    if (!employee?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('time_entries')
+        .select('*')
+        .eq('employee_id', employee.id)
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(1);
+        
+      if (error) {
+        console.error('Error checking active entry:', error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        const entry = data[0];
+        setActiveEntry({
+          id: entry.id,
+          start_time: entry.start_time,
+          description: entry.description || '',
+          project: entry.project || ''
+        });
+      } else {
+        setActiveEntry(null);
+      }
+    } catch (error) {
+      console.error('Error in checkActiveEntry:', error);
+    }
+  };
+
+  // Calculate duration in minutes
+  const calculateDurationInMinutes = (startTime: string, endTime: string | null): number => {
+    if (!endTime) return differenceInMinutes(currentTime, new Date(startTime));
+    return differenceInMinutes(new Date(endTime), new Date(startTime));
+  };
+
+  // Calculate today's total work time
+  const calculateTodaysWorkTime = (): number => {
+    const today = startOfDay(new Date());
+    const tomorrow = endOfDay(new Date());
+    
+    const todaysEntries = timeEntries.filter(entry => {
+      const entryDate = new Date(entry.start_time);
+      return entryDate >= today && entryDate <= tomorrow;
+    });
+    
+    const completedTime = todaysEntries
+      .filter(entry => entry.end_time)
+      .reduce((total, entry) => {
+        return total + calculateDurationInMinutes(entry.start_time, entry.end_time);
+      }, 0);
+    
+    // Add active session time if any
+    const activeTime = activeEntry ? 
+      calculateDurationInMinutes(activeEntry.start_time, null) : 0;
+    
+    return completedTime + activeTime;
+  };
+
+  // Calculate this week's total work time
+  const calculateWeeklyWorkTime = (): number => {
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+    
+    return timeEntries
+      .filter(entry => {
+        const entryDate = new Date(entry.start_time);
+        return entryDate >= weekStart && entryDate <= weekEnd && entry.end_time;
+      })
+      .reduce((total, entry) => {
+        return total + calculateDurationInMinutes(entry.start_time, entry.end_time);
+      }, 0);
+  };
+
+  // Calculate overtime for this week
+  const calculateWeeklyOvertime = (): number => {
+    const weeklyMinutes = calculateWeeklyWorkTime();
+    const expectedWeeklyMinutes = EMPLOYEE_WORK_MINUTES * 5; // 5 work days
+    return Math.max(0, weeklyMinutes - expectedWeeklyMinutes);
+  };
+
+  // Format minutes to time string
+  const formatMinutesToTime = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    const secs = 0; // We don't track seconds in database
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Format minutes to hours display
+  const formatMinutesToHours = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}min`;
+  };
+
+  // Start time tracking
+  const handleStartTime = async () => {
+    if (!employee?.id) {
+      toast({
+        title: "Fehler",
+        description: "Kein Mitarbeiter gefunden.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const now = new Date().toISOString();
+      
+      const { data, error } = await supabase
+        .from('time_entries')
+        .insert({
+          employee_id: employee.id,
+          start_time: now,
+          end_time: null,
+          break_duration: 0,
+          description: '',
+          project: 'Dashboard-Erfassung',
+          is_approved: false
+        })
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('Error starting time entry:', error);
+        toast({
+          title: "Fehler",
+          description: "Zeiterfassung konnte nicht gestartet werden.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setActiveEntry({
+        id: data.id,
+        start_time: data.start_time,
+        description: data.description || '',
+        project: data.project || ''
+      });
+      
+      toast({
+        title: "Eingestempelt",
+        description: "Ihre Zeiterfassung wurde gestartet.",
+      });
+      
+      fetchTimeEntries();
+    } catch (error) {
+      console.error('Error in handleStartTime:', error);
+    }
+  };
+
+  // Stop time tracking
+  const handleStopTime = async () => {
+    if (!activeEntry) return;
+
+    try {
+      const now = new Date().toISOString();
+      
+      const { error } = await supabase
+        .from('time_entries')
+        .update({ end_time: now })
+        .eq('id', activeEntry.id);
+        
+      if (error) {
+        console.error('Error stopping time entry:', error);
+        toast({
+          title: "Fehler",
+          description: "Zeiterfassung konnte nicht gestoppt werden.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const duration = calculateDurationInMinutes(activeEntry.start_time, now);
+      
+      setActiveEntry(null);
+      
+      toast({
+        title: "Ausgestempelt",
+        description: `Arbeitszeit: ${formatMinutesToHours(duration)}`,
+      });
+      
+      fetchTimeEntries();
+    } catch (error) {
+      console.error('Error in handleStopTime:', error);
+    }
+  };
+
+  const handleClockToggle = () => {
+    if (activeEntry) {
+      handleStopTime();
+    } else {
+      handleStartTime();
+    }
   };
 
   // Sample unassigned shifts data
@@ -55,40 +308,25 @@ const Dashboard = () => {
         .map(shift => ({ ...shift, date: day.date }))
     );
 
-  const overtimeHours = calculateOvertime();
+  const overtimeMinutes = calculateWeeklyOvertime();
+  const overtimeHours = Math.floor(overtimeMinutes / 60);
+  const todaysWorkMinutes = calculateTodaysWorkTime();
+
+  // Fetch data when employee changes
+  useEffect(() => {
+    if (employee?.id) {
+      fetchTimeEntries();
+      checkActiveEntry();
+    }
+  }, [employee?.id]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-      if (isClocked) {
-        setWorkTime(prev => prev + 1);
-      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isClocked]);
-
-  const handleClockToggle = () => {
-    if (isClocked) {
-      toast({
-        title: "Ausgestempelt",
-        description: `Arbeitszeit heute: ${formatTime(workTime)}`,
-      });
-    } else {
-      toast({
-        title: "Eingestempelt",
-        description: "Ihre Arbeitszeit wird erfasst.",
-      });
-    }
-    setIsClocked(!isClocked);
-  };
-
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
   const stats = [
     {

@@ -44,17 +44,38 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const { signOut } = useAuthActions();
 
   const handleLogout = async () => {
-    const result = await signOut();
-    if (result.success) {
-      toast({
-        title: "Abgemeldet",
-        description: "Sie wurden erfolgreich abgemeldet.",
-      });
-      navigate("/login");
-    } else {
+    console.log('🚪 DashboardLayout: Logout button clicked');
+    
+    try {
+      const result = await signOut();
+      
+      console.log('📊 DashboardLayout: SignOut result:', result);
+      
+      if (result.success) {
+        console.log('✅ DashboardLayout: Sign out successful, navigating to login');
+        
+        toast({
+          title: "Abgemeldet",
+          description: "Sie wurden erfolgreich abgemeldet.",
+        });
+        
+        // Navigate to login page
+        navigate("/login");
+      } else {
+        console.error('❌ DashboardLayout: Sign out failed:', result.error);
+        
+        toast({
+          title: "Fehler beim Abmelden",
+          description: result.error?.message || "Es ist ein Fehler aufgetreten.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('❌ DashboardLayout: Logout error:', error);
+      
       toast({
         title: "Fehler beim Abmelden",
-        description: "Es ist ein Fehler aufgetreten.",
+        description: "Es ist ein unerwarteter Fehler aufgetreten.",
         variant: "destructive",
       });
     }
@@ -190,7 +211,14 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                 Einstellungen
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+              <DropdownMenuItem 
+                onClick={(e) => {
+                  console.log('🖦️ Logout menu item clicked');
+                  e.preventDefault();
+                  handleLogout();
+                }} 
+                className="text-destructive cursor-pointer"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 Abmelden
               </DropdownMenuItem>

@@ -14,6 +14,7 @@ import Scheduling from "./pages/Scheduling";
 import Employees from "./pages/Employees";
 import Groups from "./pages/Groups";
 import Settings from "./pages/Settings";
+import Debug from "./pages/Debug";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
             <Route path="/groups" element={<ProtectedRoute><Groups /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/debug" element={<Debug />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

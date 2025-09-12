@@ -63,13 +63,22 @@ export const useAuth = () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔄 Auth state change:', event, session?.user?.email);
+        console.log('🔄 Auth state change:', event, {
+          email: session?.user?.email || 'No user',
+          hasSession: !!session,
+          sessionId: session?.access_token?.substring(0, 10) + '...' || 'No token'
+        });
         
-        if (!mounted) return;
+        if (!mounted) {
+          console.log('⚠️ Component unmounted, ignoring auth change');
+          return;
+        }
         
         if (session?.user) {
+          console.log('📊 Loading user data after auth change...');
           await loadUserData(session.user);
         } else {
+          console.log('🧽 Clearing auth state - no session');
           setAuthState({
             user: null,
             profile: null,
@@ -305,10 +314,24 @@ export const useAuthActions = () => {
   const signOut = async () => {
     setLoading(true);
     try {
+      console.log('🚪 Starting sign out process...');
+      
+      // Clear the auth state first
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      
+      if (error) {
+        console.error('❌ Sign out error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Sign out successful');
+      
+      // Give a moment for the auth state change to propagate
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       return { success: true };
     } catch (error) {
+      console.error('❌ Sign out failed:', error);
       return { success: false, error: error as AuthError };
     } finally {
       setLoading(false);
