@@ -21,15 +21,16 @@ const Register = () => {
     firstName: "",
     lastName: "",
     employeeId: "",
+    companyCode: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.email || !formData.password || !formData.firstName || !formData.lastName) {
+    if (!formData.email || !formData.password || !formData.firstName || !formData.lastName || !formData.companyCode) {
       toast({
         title: "Registration Failed",
-        description: "Please fill in all required fields.",
+        description: "Please fill in all required fields including Company Code.",
         variant: "destructive",
       });
       return;
@@ -57,6 +58,7 @@ const Register = () => {
       firstName: formData.firstName,
       lastName: formData.lastName,
       employeeId: formData.employeeId,
+      companyCode: formData.companyCode,
     });
     
     if (result.success) {
@@ -134,6 +136,22 @@ const Register = () => {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="companyCode">Company Code *</Label>
+              <Input
+                id="companyCode"
+                type="text"
+                placeholder="DEMO2025"
+                value={formData.companyCode}
+                onChange={(e) => setFormData({ ...formData, companyCode: e.target.value.toUpperCase() })}
+                required
+                className="uppercase"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter your company code provided by your administrator.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="employeeId">Employee ID (Optional)</Label>
               <Input
                 id="employeeId"
@@ -144,7 +162,6 @@ const Register = () => {
               />
               <p className="text-xs text-muted-foreground">
                 If you have an existing employee record, enter your employee ID to link accounts.
-                Your company will be automatically assigned based on your email domain.
               </p>
             </div>
             

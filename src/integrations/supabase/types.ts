@@ -17,6 +17,7 @@ export type Database = {
       companies: {
         Row: {
           address: string | null
+          company_code: string
           created_at: string | null
           domain: string | null
           email: string | null
@@ -31,6 +32,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          company_code: string
           created_at?: string | null
           domain?: string | null
           email?: string | null
@@ -45,6 +47,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          company_code?: string
           created_at?: string | null
           domain?: string | null
           email?: string | null
@@ -423,6 +426,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assign_user_company_by_code: {
+        Args: { company_code_input: string; user_id: string }
+        Returns: boolean
+      }
       get_current_employee: {
         Args: Record<PropertyKey, never>
         Returns: string

@@ -129,9 +129,29 @@ export const useAuthActions = () => {
     firstName?: string;
     lastName?: string;
     employeeId?: string;
+    companyCode?: string;
   }) => {
     setLoading(true);
     try {
+      // First, validate company code if provided
+      if (userData?.companyCode) {
+        const { data: company, error: companyError } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('company_code', userData.companyCode)
+          .eq('is_active', true)
+          .single();
+          
+        if (companyError || !company) {
+          return { 
+            success: false, 
+            error: { message: 'Invalid company code. Please check with your administrator.' } as AuthError 
+          };
+        }
+      }
+
+      // Sign up the user - the database trigger will automatically create
+      // the employee record and user_profile with company assignment
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -141,6 +161,7 @@ export const useAuthActions = () => {
       });
       
       if (error) throw error;
+      
       return { success: true, data };
     } catch (error) {
       return { success: false, error: error as AuthError };

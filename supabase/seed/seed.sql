@@ -1,9 +1,11 @@
 -- Seed data for development with company multi-tenancy
 -- First, ensure companies exist (these should already be created by the migration)
-INSERT INTO companies (id, name, slug, domain, email, timezone) VALUES
-  ('00000000-0000-0000-0000-000000000001', 'Demo Company Inc.', 'demo-company', 'company.com', 'admin@company.com', 'America/New_York'),
-  ('00000000-0000-0000-0000-000000000002', 'Acme Corporation', 'acme-corp', 'acme.com', 'contact@acme.com', 'America/Los_Angeles')
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO companies (id, name, slug, company_code, email, timezone) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'Demo Company Inc.', 'demo-company', 'DEMO2025', 'admin@democompany.com', 'America/New_York'),
+  ('00000000-0000-0000-0000-000000000002', 'Acme Corporation', 'acme-corp', 'ACME2025', 'contact@acmecorp.com', 'America/Los_Angeles')
+ON CONFLICT (id) DO UPDATE SET 
+  company_code = EXCLUDED.company_code,
+  email = EXCLUDED.email;
 
 -- Insert sample employees with company assignments
 INSERT INTO employees (id, email, first_name, last_name, employee_id, department, position, hire_date, hourly_rate, company_id) VALUES
@@ -14,25 +16,18 @@ INSERT INTO employees (id, email, first_name, last_name, employee_id, department
   ('55555555-5555-5555-5555-555555555555', 'david.brown@company.com', 'David', 'Brown', 'EMP005', 'QA', 'QA Engineer', '2023-02-20', 38.00, '00000000-0000-0000-0000-000000000001'),
   -- Employees for second company
   ('66666666-6666-6666-6666-666666666666', 'alice.johnson@acme.com', 'Alice', 'Johnson', 'EMP101', 'Marketing', 'Marketing Manager', '2023-03-01', 50.00, '00000000-0000-0000-0000-000000000002'),
-  ('77777777-7777-7777-7777-777777777777', 'bob.williams@acme.com', 'Bob', 'Williams', 'EMP102', 'Sales', 'Sales Representative', '2023-04-15', 42.00, '00000000-0000-0000-0000-000000000002');
+  ('77777777-7777-7777-7777-777777777777', 'bob.williams@acme.com', 'Bob', 'Williams', 'EMP102', 'Sales', 'Sales Representative', '2023-04-15', 42.00, '00000000-0000-0000-0000-000000000002')
+ON CONFLICT (id) DO UPDATE SET
+  company_id = EXCLUDED.company_id,
+  department = EXCLUDED.department,
+  position = EXCLUDED.position;
 
--- Insert sample user profiles (these would normally be created by the auth trigger)
--- Note: In a real scenario, these users would sign up through the registration form
--- and the user_profiles would be automatically created by the trigger
-INSERT INTO user_profiles (id, employee_id, role, company_id) VALUES
-  ('aaaaaaaa-bbbb-cccc-dddd-111111111111', '11111111-1111-1111-1111-111111111111', 'employee', '00000000-0000-0000-0000-000000000001'),
-  ('aaaaaaaa-bbbb-cccc-dddd-222222222222', '22222222-2222-2222-2222-222222222222', 'admin', '00000000-0000-0000-0000-000000000001'),
-  ('aaaaaaaa-bbbb-cccc-dddd-333333333333', '33333333-3333-3333-3333-333333333333', 'employee', '00000000-0000-0000-0000-000000000001'),
-  ('aaaaaaaa-bbbb-cccc-dddd-444444444444', '44444444-4444-4444-4444-444444444444', 'manager', '00000000-0000-0000-0000-000000000001'),
-  -- User profiles for second company
-  ('aaaaaaaa-bbbb-cccc-dddd-666666666666', '66666666-6666-6666-6666-666666666666', 'admin', '00000000-0000-0000-0000-000000000002'),
-  ('aaaaaaaa-bbbb-cccc-dddd-777777777777', '77777777-7777-7777-7777-777777777777', 'employee', '00000000-0000-0000-0000-000000000002');
+-- Note: User profiles are automatically created when users register through the auth system
+-- The handle_new_user() trigger will create user_profiles entries when real users sign up
+-- For development, you can test by actually registering users through the application
 
--- Update employees with auth_user_id to show the linking
-UPDATE employees SET auth_user_id = 'aaaaaaaa-bbbb-cccc-dddd-111111111111' WHERE id = '11111111-1111-1111-1111-111111111111';
-UPDATE employees SET auth_user_id = 'aaaaaaaa-bbbb-cccc-dddd-222222222222' WHERE id = '22222222-2222-2222-2222-222222222222';
-UPDATE employees SET auth_user_id = 'aaaaaaaa-bbbb-cccc-dddd-333333333333' WHERE id = '33333333-3333-3333-3333-333333333333';
-UPDATE employees SET auth_user_id = 'aaaaaaaa-bbbb-cccc-dddd-444444444444' WHERE id = '44444444-4444-4444-4444-444444444444';
+-- Note: auth_user_id will be populated when real users register and link to employees
+-- This happens automatically through the registration process with company codes
 
 -- Insert sample groups with company assignments
 INSERT INTO groups (id, name, description, manager_id, company_id) VALUES
@@ -42,7 +37,12 @@ INSERT INTO groups (id, name, description, manager_id, company_id) VALUES
   ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'QA Team', 'Quality assurance and testing', '55555555-5555-5555-5555-555555555555', '00000000-0000-0000-0000-000000000001'),
   -- Groups for second company
   ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'Marketing Team', 'Marketing and promotion activities', '66666666-6666-6666-6666-666666666666', '00000000-0000-0000-0000-000000000002'),
-  ('ffffffff-ffff-ffff-ffff-ffffffffffff', 'Sales Team', 'Sales and customer relations', '77777777-7777-7777-7777-777777777777', '00000000-0000-0000-0000-000000000002');
+  ('ffffffff-ffff-ffff-ffff-ffffffffffff', 'Sales Team', 'Sales and customer relations', '77777777-7777-7777-7777-777777777777', '00000000-0000-0000-0000-000000000002')
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  manager_id = EXCLUDED.manager_id,
+  company_id = EXCLUDED.company_id;
 
 -- Insert employee-group relationships
 INSERT INTO employee_groups (employee_id, group_id) VALUES
@@ -55,7 +55,8 @@ INSERT INTO employee_groups (employee_id, group_id) VALUES
   ('55555555-5555-5555-5555-555555555555', 'dddddddd-dddd-dddd-dddd-dddddddddddd'),
   -- Acme Corporation employees
   ('66666666-6666-6666-6666-666666666666', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'),
-  ('77777777-7777-7777-7777-777777777777', 'ffffffff-ffff-ffff-ffff-ffffffffffff');
+  ('77777777-7777-7777-7777-777777777777', 'ffffffff-ffff-ffff-ffff-ffffffffffff')
+ON CONFLICT (employee_id, group_id) DO NOTHING;
 
 -- Insert sample time entries (for the current week)
 INSERT INTO time_entries (employee_id, start_time, end_time, break_duration, description, project) VALUES
@@ -64,13 +65,15 @@ INSERT INTO time_entries (employee_id, start_time, end_time, break_duration, des
   ('22222222-2222-2222-2222-222222222222', '2025-09-08 09:15:00+00', '2025-09-08 18:00:00+00', 60, 'API development and testing', 'Chrono Meister'),
   ('22222222-2222-2222-2222-222222222222', '2025-09-09 09:00:00+00', '2025-09-09 17:45:00+00', 30, 'Database optimization', 'Chrono Meister'),
   ('33333333-3333-3333-3333-333333333333', '2025-09-08 10:00:00+00', '2025-09-08 18:30:00+00', 45, 'UI mockups for time tracking', 'Chrono Meister'),
-  ('55555555-5555-5555-5555-555555555555', '2025-09-08 08:45:00+00', '2025-09-08 17:15:00+00', 30, 'Testing authentication flow', 'Chrono Meister');
+  ('55555555-5555-5555-5555-555555555555', '2025-09-08 08:45:00+00', '2025-09-08 17:15:00+00', 30, 'Testing authentication flow', 'Chrono Meister')
+ON CONFLICT (id) DO NOTHING;
 
 -- Insert sample vacation requests
 INSERT INTO vacation_requests (employee_id, start_date, end_date, days_requested, request_type, reason, status) VALUES
   ('11111111-1111-1111-1111-111111111111', '2025-09-20', '2025-09-22', 3, 'vacation', 'Family trip', 'pending'),
   ('22222222-2222-2222-2222-222222222222', '2025-10-01', '2025-10-05', 5, 'vacation', 'Annual leave', 'approved'),
-  ('33333333-3333-3333-3333-333333333333', '2025-09-15', '2025-09-15', 1, 'sick', 'Medical appointment', 'approved');
+  ('33333333-3333-3333-3333-333333333333', '2025-09-15', '2025-09-15', 1, 'sick', 'Medical appointment', 'approved')
+ON CONFLICT (id) DO NOTHING;
 
 -- Insert sample schedules (for this week)
 INSERT INTO schedules (employee_id, date, shift_start, shift_end, break_duration) VALUES
@@ -83,4 +86,8 @@ INSERT INTO schedules (employee_id, date, shift_start, shift_end, break_duration
   ('33333333-3333-3333-3333-333333333333', '2025-09-11', '10:00', '18:30', 45),
   ('33333333-3333-3333-3333-333333333333', '2025-09-12', '10:00', '18:30', 45),
   ('55555555-5555-5555-5555-555555555555', '2025-09-11', '08:30', '17:00', 30),
-  ('55555555-5555-5555-5555-555555555555', '2025-09-12', '08:30', '17:00', 30);
+  ('55555555-5555-5555-5555-555555555555', '2025-09-12', '08:30', '17:00', 30)
+ON CONFLICT (employee_id, date) DO UPDATE SET
+  shift_start = EXCLUDED.shift_start,
+  shift_end = EXCLUDED.shift_end,
+  break_duration = EXCLUDED.break_duration;

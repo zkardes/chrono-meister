@@ -94,7 +94,10 @@ const CompanySelector = ({ onCompanySelect, showCurrentCompany = true }: Company
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="font-medium">{currentCompany.name}</h3>
-              <Badge variant="outline">{currentCompany.slug}</Badge>
+              <div className="space-x-2">
+                <Badge variant="outline">{currentCompany.company_code}</Badge>
+                <Badge variant="outline">{currentCompany.slug}</Badge>
+              </div>
             </div>
             {currentCompany.timezone && (
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -157,6 +160,9 @@ const CompanySelector = ({ onCompanySelect, showCurrentCompany = true }: Company
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h4 className="font-medium">{company.name}</h4>
+                      <Badge variant="outline" className="text-xs">
+                        {company.company_code}
+                      </Badge>
                       <Badge variant="outline" className="text-xs">
                         {company.slug}
                       </Badge>
