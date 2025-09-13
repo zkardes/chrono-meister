@@ -9,82 +9,57 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronLeft, ChevronRight, Users, Plus, Settings, Edit, Trash2, Clock, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Users, Plus, Settings, Edit, Trash2, Clock, X, Loader2 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, isSameDay } from "date-fns";
 import { de } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-
-interface TimeSlot {
-  id: string;
-  name: string;
-  startTime: string;
-  endTime: string;
-  color: string;
-}
-
-interface Employee {
-  id: number;
-  name: string;
-  position: string;
-  department: string;
-  groupIds: number[];
-}
-
-interface Group {
-  id: number;
-  name: string;
-  department: string;
-  memberIds: number[];
-}
+import { useAuthContext } from "@/contexts/AuthContext";
+import { useTimeSlots, useScheduleAssignments, useEmployees } from "@/hooks/use-scheduling";
+import { useGroups } from "@/hooks/use-groups";
 
 const Scheduling = () => {
   const { toast } = useToast();
+  const { isAdmin, employee, company } = useAuthContext();
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [selectedGroup, setSelectedGroup] = useState("all");
   const [showAssignDialog, setShowAssignDialog] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<{ day: Date; shift: string } | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<{ day: Date; timeSlotId: string } | null>(null);
   const [showSlotManager, setShowSlotManager] = useState(false);
-  const [editingSlot, setEditingSlot] = useState<TimeSlot | null>(null);
+  const [editingSlot, setEditingSlot] = useState<any>(null);
   const [showSlotDialog, setShowSlotDialog] = useState(false);
   const [slotForm, setSlotForm] = useState({ name: '', startTime: '', endTime: '', color: 'bg-blue-500/10 text-blue-700 border-blue-500/20' });
-  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
-  const [scheduleAssignments, setScheduleAssignments] = useState<Record<string, Record<string, number[]>>>({});
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   
-  // Get user role and current user ID
-  const userRole = localStorage.getItem("userRole") || "employee";
-  const currentUserId = parseInt(localStorage.getItem("currentUserId") || "1"); // Default to user ID 1 for demo
-
+  // Get week range for data fetching
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  
+  // Use database hooks
+  const { timeSlots, loading: timeSlotsLoading, createTimeSlot, updateTimeSlot, deleteTimeSlot } = useTimeSlots();
+  const { 
+    scheduleAssignments, 
+    loading: assignmentsLoading, 
+    assignEmployee, 
+    unassignEmployee, 
+    getAssignmentsForSlot 
+  } = useScheduleAssignments(format(weekStart, 'yyyy-MM-dd'), format(weekEnd, 'yyyy-MM-dd'));
+  const { employees, loading: employeesLoading, getEmployeesByGroup } = useEmployees();
+  const { groups, loading: groupsLoading } = useGroups();
+  
+  // Loading state
+  const isLoading = timeSlotsLoading || assignmentsLoading || employeesLoading || groupsLoading;
+  
+  // Check if user has admin/manager permissions
+  const canManageSchedules = isAdmin;
 
-  // Employee and Group data (integrated from other pages)
-  const allEmployees: Employee[] = [
-    { id: 1, name: "Max Mustermann", position: "Erzieher", department: "Kita", groupIds: [1] },
-    { id: 2, name: "Anna Schmidt", position: "Erzieherin", department: "Kita", groupIds: [1] },
-    { id: 3, name: "Thomas Weber", position: "Kita - Leitung", department: "Management", groupIds: [3] },
-    { id: 4, name: "Lisa Müller", position: "FSJ", department: "Ausbildung", groupIds: [2] },
-    { id: 5, name: "Peter Klein", position: "DevOps Engineer", department: "IT", groupIds: [1] },
-    { id: 6, name: "Sarah Johnson", position: "UX Designerin", department: "Design", groupIds: [2] },
-  ];
-
-  const allGroups: Group[] = [
-    { id: 1, name: "Entwicklungsteam", department: "IT", memberIds: [1, 2, 5] },
-    { id: 2, name: "Design Team", department: "Design", memberIds: [4, 6] },
-    { id: 3, name: "Management Team", department: "Management", memberIds: [3] },
-  ];
-
-  const groups = [
+  // Format groups for Select component
+  const groupOptions = [
     { id: "all", name: "Alle Gruppen" },
-    ...allGroups.map(group => ({ id: group.id.toString(), name: group.name }))
+    ...groups.map(group => ({ id: group.id, name: group.name }))
   ];
 
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([
-    { id: "morning", name: "Frühschicht", startTime: "06:00", endTime: "14:00", color: "bg-blue-500/10 text-blue-700 border-blue-500/20" },
-    { id: "afternoon", name: "Spätschicht", startTime: "14:00", endTime: "22:00", color: "bg-orange-500/10 text-orange-700 border-orange-500/20" },
-    { id: "night", name: "Nachtschicht", startTime: "22:00", endTime: "06:00", color: "bg-purple-500/10 text-purple-700 border-purple-500/20" },
-  ]);
-
+  // Color options for time slots
   const colorOptions = [
     { label: "Blau", value: "bg-blue-500/10 text-blue-700 border-blue-500/20" },
     { label: "Orange", value: "bg-orange-500/10 text-orange-700 border-orange-500/20" },
@@ -94,114 +69,79 @@ const Scheduling = () => {
     { label: "Gelb", value: "bg-yellow-500/10 text-yellow-700 border-yellow-500/20" },
   ];
 
-  // Sample schedule data - now using employee IDs
-  const sampleScheduleData = {
-    "2024-01-08": {
-      morning: [1, 2], // Max Mustermann, Anna Schmidt
-      afternoon: [4, 5], // Lisa Müller, Peter Klein
-      night: [3], // Thomas Weber
-    },
-    "2024-01-09": {
-      morning: [4, 1], // Lisa Müller, Max Mustermann
-      afternoon: [2], // Anna Schmidt
-      night: [5], // Peter Klein
-    },
-    "2024-01-10": {
-      morning: [3, 2], // Thomas Weber, Anna Schmidt
-      afternoon: [1, 4], // Max Mustermann, Lisa Müller
-      night: [],
-    },
-  };
-
   // Helper function to format employee name (FirstName. LastNameInitial)
-  const formatEmployeeName = (employee: Employee): string => {
-    const nameParts = employee.name.split(' ');
-    if (nameParts.length >= 2) {
-      const firstName = nameParts[0];
-      const lastNameInitial = nameParts[nameParts.length - 1].charAt(0);
-      return `${firstName}. ${lastNameInitial}`;
+  const formatEmployeeName = (employee: any): string => {
+    if (employee.first_name && employee.last_name) {
+      const firstNameInitial = employee.first_name.charAt(0);
+      const lastNameInitial = employee.last_name.charAt(0);
+      return `${employee.first_name}. ${lastNameInitial}`;
     }
-    return employee.name;
+    return employee.first_name || employee.last_name || 'Unknown';
   };
 
   // Get available employees based on selected group
-  const getAvailableEmployees = (): Employee[] => {
-    if (selectedGroup === "all") {
-      return allEmployees;
-    }
-    
-    const groupId = parseInt(selectedGroup);
-    const group = allGroups.find(g => g.id === groupId);
-    
-    if (!group) return [];
-    
-    return allEmployees.filter(emp => group.memberIds.includes(emp.id));
+  const getAvailableEmployees = () => {
+    return getEmployeesByGroup(selectedGroup === "all" ? undefined : selectedGroup);
   };
 
   // Get employees assigned to a specific slot
-  const getEmployeesForSlot = (day: Date, shiftId: string): Employee[] => {
+  const getEmployeesForSlot = (day: Date, timeSlotId: string) => {
     const dateKey = format(day, "yyyy-MM-dd");
-    const employeeIds = scheduleAssignments[dateKey]?.[shiftId] || sampleScheduleData[dateKey]?.[shiftId] || [];
+    const assignments = getAssignmentsForSlot(timeSlotId, dateKey);
     
-    const employees = employeeIds.map(id => allEmployees.find(emp => emp.id === id)).filter(Boolean) as Employee[];
+    const assignedEmployees = assignments
+      .map(assignment => {
+        // Find the employee from our employees list since the assignment contains employee_id
+        return employees.find(emp => emp.id === assignment.employee_id);
+      })
+      .filter(Boolean);
     
     // For employees: only show themselves
-    if (userRole === "employee") {
-      return employees.filter(emp => emp.id === currentUserId);
+    if (!canManageSchedules && employee) {
+      return assignedEmployees.filter(emp => emp && emp.id === employee.id);
     }
     
     // For admins: filter by selected group
     if (selectedGroup === "all") {
-      return employees;
+      return assignedEmployees;
     }
     
-    const groupId = parseInt(selectedGroup);
-    const group = allGroups.find(g => g.id === groupId);
-    
-    if (!group) return [];
-    
-    return employees.filter(emp => group.memberIds.includes(emp.id));
+    return assignedEmployees.filter(emp => {
+      const empWithGroups = emp as any; // Type assertion for employee_groups
+      return emp && empWithGroups.employee_groups?.some((eg: any) => eg.group?.id === selectedGroup);
+    });
   };
 
-  // Check if a slot has any assignments (for employee view)
-  const hasEmployeeAssignment = (day: Date, shiftId: string): boolean => {
+  // Check if current employee has assignment for this slot
+  const hasEmployeeAssignment = (day: Date, timeSlotId: string): boolean => {
+    if (!employee) return false;
     const dateKey = format(day, "yyyy-MM-dd");
-    const employeeIds = scheduleAssignments[dateKey]?.[shiftId] || sampleScheduleData[dateKey]?.[shiftId] || [];
-    return employeeIds.includes(currentUserId);
+    const assignments = getAssignmentsForSlot(timeSlotId, dateKey);
+    return assignments.some(assignment => assignment.employee_id === employee.id);
   };
 
-  // Employee can only request to be removed from their shifts
-  const handleEmployeeShiftChange = (day: Date, shift: string) => {
-    if (userRole !== "employee") return;
+  // Employee can request assignment or removal from shifts
+  const handleEmployeeShiftChange = async (day: Date, timeSlotId: string) => {
+    if (canManageSchedules || !employee) return;
     
-    const hasAssignment = hasEmployeeAssignment(day, shift);
+    const hasAssignment = hasEmployeeAssignment(day, timeSlotId);
     const actionText = hasAssignment ? "abmelden" : "anmelden";
     const confirmText = hasAssignment 
       ? "Möchten Sie sich von dieser Schicht abmelden?" 
       : "Möchten Sie sich für diese Schicht anmelden?";
     
     if (window.confirm(confirmText)) {
-      const dateKey = format(day, "yyyy-MM-dd");
-      
-      setScheduleAssignments(prev => {
-        const currentAssignments = prev[dateKey]?.[shift] || sampleScheduleData[dateKey]?.[shift] || [];
-        const updatedAssignments = hasAssignment
-          ? currentAssignments.filter(id => id !== currentUserId)
-          : [...currentAssignments, currentUserId];
+      try {
+        const dateKey = format(day, "yyyy-MM-dd");
         
-        return {
-          ...prev,
-          [dateKey]: {
-            ...prev[dateKey],
-            [shift]: updatedAssignments
-          }
-        };
-      });
-      
-      toast({
-        title: hasAssignment ? "Abgemeldet" : "Angemeldet",
-        description: `Sie wurden erfolgreich von der Schicht ${hasAssignment ? 'ab' : 'an'}gemeldet.`,
-      });
+        if (hasAssignment) {
+          await unassignEmployee(employee.id, timeSlotId, dateKey);
+        } else {
+          await assignEmployee(employee.id, timeSlotId, dateKey);
+        }
+      } catch (error) {
+        console.error('Error changing shift assignment:', error);
+      }
     }
   };
 
@@ -209,20 +149,20 @@ const Scheduling = () => {
     setCurrentWeek(direction === "next" ? addWeeks(currentWeek, 1) : subWeeks(currentWeek, 1));
   };
 
-  const handleAssignEmployee = (day: Date, shift: string) => {
+  const handleAssignEmployee = (day: Date, timeSlotId: string) => {
     // Employee can only manage their own shifts
-    if (userRole === "employee") {
-      handleEmployeeShiftChange(day, shift);
+    if (!canManageSchedules) {
+      handleEmployeeShiftChange(day, timeSlotId);
       return;
     }
     
     // Admin functionality
-    setSelectedSlot({ day, shift });
+    setSelectedSlot({ day, timeSlotId });
     setSelectedEmployees([]);
     setShowAssignDialog(true);
   };
 
-  const handleSaveAssignment = () => {
+  const handleSaveAssignment = async () => {
     if (!selectedSlot || selectedEmployees.length === 0) {
       toast({
         title: "Keine Mitarbeiter ausgewählt",
@@ -232,26 +172,22 @@ const Scheduling = () => {
       return;
     }
 
-    const dateKey = format(selectedSlot.day, "yyyy-MM-dd");
-    
-    setScheduleAssignments(prev => ({
-      ...prev,
-      [dateKey]: {
-        ...prev[dateKey],
-        [selectedSlot.shift]: selectedEmployees
+    try {
+      const dateKey = format(selectedSlot.day, "yyyy-MM-dd");
+      
+      // Assign all selected employees
+      for (const employeeId of selectedEmployees) {
+        await assignEmployee(employeeId, selectedSlot.timeSlotId, dateKey);
       }
-    }));
 
-    toast({
-      title: "Mitarbeiter zugewiesen",
-      description: `${selectedEmployees.length} Mitarbeiter wurden erfolgreich zugewiesen.`,
-    });
-
-    setShowAssignDialog(false);
-    setSelectedEmployees([]);
+      setShowAssignDialog(false);
+      setSelectedEmployees([]);
+    } catch (error) {
+      console.error('Error saving assignments:', error);
+    }
   };
 
-  const toggleEmployeeSelection = (employeeId: number) => {
+  const toggleEmployeeSelection = (employeeId: string) => {
     setSelectedEmployees(prev => 
       prev.includes(employeeId)
         ? prev.filter(id => id !== employeeId)
@@ -259,9 +195,9 @@ const Scheduling = () => {
     );
   };
 
-  const removeEmployeeFromSlot = (day: Date, shiftId: string, employeeId: number) => {
+  const removeEmployeeFromSlot = async (day: Date, timeSlotId: string, employeeId: string) => {
     // Employees can only remove themselves
-    if (userRole === "employee" && employeeId !== currentUserId) {
+    if (!canManageSchedules && employee && employeeId !== employee.id) {
       toast({
         title: "Keine Berechtigung",
         description: "Sie können nur Ihre eigenen Schichten ändern.",
@@ -270,25 +206,12 @@ const Scheduling = () => {
       return;
     }
     
-    const dateKey = format(day, "yyyy-MM-dd");
-    
-    setScheduleAssignments(prev => {
-      const currentAssignments = prev[dateKey]?.[shiftId] || [];
-      const updatedAssignments = currentAssignments.filter(id => id !== employeeId);
-      
-      return {
-        ...prev,
-        [dateKey]: {
-          ...prev[dateKey],
-          [shiftId]: updatedAssignments
-        }
-      };
-    });
-
-    toast({
-      title: "Mitarbeiter entfernt",
-      description: userRole === "employee" ? "Sie wurden von der Schicht abgemeldet." : "Der Mitarbeiter wurde von der Schicht entfernt.",
-    });
+    try {
+      const dateKey = format(day, "yyyy-MM-dd");
+      await unassignEmployee(employeeId, timeSlotId, dateKey);
+    } catch (error) {
+      console.error('Error removing employee from slot:', error);
+    }
   };
 
   const handleCreateSlot = () => {
@@ -297,13 +220,18 @@ const Scheduling = () => {
     setShowSlotDialog(true);
   };
 
-  const handleEditSlot = (slot: TimeSlot) => {
-    setSlotForm({ name: slot.name, startTime: slot.startTime, endTime: slot.endTime, color: slot.color });
+  const handleEditSlot = (slot: any) => {
+    setSlotForm({ 
+      name: slot.name, 
+      startTime: slot.start_time, 
+      endTime: slot.end_time, 
+      color: slot.color 
+    });
     setEditingSlot(slot);
     setShowSlotDialog(true);
   };
 
-  const handleSaveSlot = () => {
+  const handleSaveSlot = async () => {
     if (!slotForm.name || !slotForm.startTime || !slotForm.endTime) {
       toast({
         title: "Unvollständige Eingabe",
@@ -313,49 +241,59 @@ const Scheduling = () => {
       return;
     }
 
-    if (editingSlot) {
-      setTimeSlots(prev => prev.map(slot => 
-        slot.id === editingSlot.id 
-          ? { ...slot, name: slotForm.name, startTime: slotForm.startTime, endTime: slotForm.endTime, color: slotForm.color }
-          : slot
-      ));
-      toast({
-        title: "Zeitslot aktualisiert",
-        description: `${slotForm.name} wurde erfolgreich aktualisiert.`,
-      });
-    } else {
-      const newSlot: TimeSlot = {
-        id: Date.now().toString(),
-        name: slotForm.name,
-        startTime: slotForm.startTime,
-        endTime: slotForm.endTime,
-        color: slotForm.color,
-      };
-      setTimeSlots(prev => [...prev, newSlot]);
-      toast({
-        title: "Zeitslot erstellt",
-        description: `${slotForm.name} wurde erfolgreich erstellt.`,
-      });
+    try {
+      if (editingSlot) {
+        await updateTimeSlot(editingSlot.id, {
+          name: slotForm.name,
+          start_time: slotForm.startTime,
+          end_time: slotForm.endTime,
+          color: slotForm.color,
+        });
+      } else {
+        await createTimeSlot({
+          name: slotForm.name,
+          start_time: slotForm.startTime,
+          end_time: slotForm.endTime,
+          color: slotForm.color,
+          is_active: true,
+        });
+      }
+      setShowSlotDialog(false);
+    } catch (error) {
+      console.error('Error saving slot:', error);
     }
-    setShowSlotDialog(false);
   };
 
-  const handleDeleteSlot = (slotId: string) => {
-    setTimeSlots(prev => prev.filter(slot => slot.id !== slotId));
-    toast({
-      title: "Zeitslot gelöscht",
-      description: "Der Zeitslot wurde erfolgreich entfernt.",
-    });
+  const handleDeleteSlot = async (slotId: string) => {
+    try {
+      await deleteTimeSlot(slotId);
+    } catch (error) {
+      console.error('Error deleting slot:', error);
+    }
   };
 
   // Sort time slots by starting time
   const sortedTimeSlots = [...timeSlots].sort((a, b) => {
-    const timeA = a.startTime.split(':').map(Number);
-    const timeB = b.startTime.split(':').map(Number);
+    const timeA = a.start_time?.split(':').map(Number) || [0, 0];
+    const timeB = b.start_time?.split(':').map(Number) || [0, 0];
     const minutesA = timeA[0] * 60 + timeA[1];
     const minutesB = timeB[0] * 60 + timeB[1];
     return minutesA - minutesB;
   });
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-96">
+          <div className="flex flex-col items-center space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Schichtpläne werden geladen...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -364,23 +302,23 @@ const Scheduling = () => {
           <div>
             <h1 className="text-3xl font-bold">Schichtplanung</h1>
             <p className="text-muted-foreground">
-              {userRole === "admin" ? "Planen Sie Arbeitsschichten für Ihre Teams" : "Ihre persönlichen Schichtpläne"}
+              {canManageSchedules ? "Planen Sie Arbeitsschichten für Ihre Teams" : "Ihre persönlichen Schichtpläne"}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {userRole === "admin" && (
+            {canManageSchedules && (
               <Button variant="outline" onClick={() => setShowSlotManager(true)}>
                 <Settings className="mr-2 h-4 w-4" />
                 Zeitslots verwalten
               </Button>
             )}
-            {userRole === "admin" && (
+            {canManageSchedules && (
               <Select value={selectedGroup} onValueChange={setSelectedGroup}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Gruppe wählen" />
                 </SelectTrigger>
                 <SelectContent>
-                  {groups.map((group) => (
+                  {groupOptions.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4" />
@@ -401,8 +339,8 @@ const Scheduling = () => {
                 <CardTitle>Wochenansicht</CardTitle>
                 <CardDescription>
                   {format(weekStart, "dd. MMM", { locale: de })} - {format(weekEnd, "dd. MMM yyyy", { locale: de })}
-                  {userRole === "admin" && selectedGroup !== "all" && ` • ${groups.find(g => g.id === selectedGroup)?.name}`}
-                  {userRole === "employee" && ` • Ihre persönlichen Schichten`}
+                  {canManageSchedules && selectedGroup !== "all" && ` • ${groupOptions.find(g => g.id === selectedGroup)?.name}`}
+                  {!canManageSchedules && ` • Ihre persönlichen Schichten`}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -450,7 +388,7 @@ const Scheduling = () => {
                   <div key={slot.id} className="grid grid-cols-8 gap-4 mb-4">
                     <div className="flex flex-col">
                       <span className="font-medium">{slot.name}</span>
-                      <span className="text-xs text-muted-foreground">{slot.startTime} - {slot.endTime}</span>
+                      <span className="text-xs text-muted-foreground">{slot.start_time} - {slot.end_time}</span>
                     </div>
                     {weekDays.map((day) => {
                       const employees = getEmployeesForSlot(day, slot.id);
@@ -458,7 +396,7 @@ const Scheduling = () => {
                         <div
                           key={day.toISOString()}
                           className={`border rounded-lg p-2 min-h-[80px] transition-colors ${
-                            userRole === "employee" 
+                            !canManageSchedules 
                               ? (hasEmployeeAssignment(day, slot.id) 
                                   ? `${slot.color} cursor-pointer hover:bg-muted/50` 
                                   : 'bg-gray-50 border-gray-200 cursor-pointer hover:bg-gray-100')
@@ -469,18 +407,18 @@ const Scheduling = () => {
                           <div className="space-y-1">
                             {employees.length > 0 ? (
                               employees.map((employee) => (
-                                <div key={employee.id} className="flex items-center justify-between">
+                                <div key={employee?.id} className="flex items-center justify-between">
                                   <Badge variant="secondary" className="text-xs flex-1 mr-1">
-                                    {userRole === "employee" ? "Ihre Schicht" : formatEmployeeName(employee)}
+                                    {!canManageSchedules ? "Ihre Schicht" : (employee ? formatEmployeeName(employee) : "Unknown")}
                                   </Badge>
-                                  {(userRole === "admin" || (userRole === "employee" && employee.id === currentUserId)) && (
+                                  {(canManageSchedules || (!canManageSchedules && employee?.id === employee?.id)) && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       className="h-4 w-4 p-0 opacity-50 hover:opacity-100"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        removeEmployeeFromSlot(day, slot.id, employee.id);
+                                        if (employee?.id) removeEmployeeFromSlot(day, slot.id, employee.id);
                                       }}
                                     >
                                       <X className="h-3 w-3" />
@@ -490,7 +428,7 @@ const Scheduling = () => {
                               ))
                             ) : (
                               <div className="flex items-center justify-center h-[60px]">
-                                {userRole === "employee" ? (
+                                {!canManageSchedules ? (
                                   <span className="text-xs text-muted-foreground">
                                     Klicken zum Anmelden
                                   </span>
@@ -515,7 +453,7 @@ const Scheduling = () => {
                   <div key={slot.id} className="flex items-center gap-2">
                     <div className={`w-4 h-4 rounded border ${slot.color}`} />
                     <span className="text-sm text-muted-foreground">
-                      {slot.name} ({slot.startTime} - {slot.endTime})
+                      {slot.name} ({slot.start_time} - {slot.end_time})
                     </span>
                   </div>
                 ))}
@@ -525,15 +463,15 @@ const Scheduling = () => {
         </Card>
 
         {/* Assign Employee Dialog - Admin Only */}
-        {showAssignDialog && selectedSlot && userRole === "admin" && (
+        {showAssignDialog && selectedSlot && canManageSchedules && (
           <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Mitarbeiter zuweisen</DialogTitle>
                 <DialogDescription>
                   {format(selectedSlot.day, "EEEE, dd. MMM yyyy", { locale: de })} •{" "}
-                  {sortedTimeSlots.find(s => s.id === selectedSlot.shift)?.name}
-                  {selectedGroup !== "all" && ` • ${groups.find(g => g.id === selectedGroup)?.name}`}
+                  {sortedTimeSlots.find(s => s.id === selectedSlot.timeSlotId)?.name}
+                  {selectedGroup !== "all" && ` • ${groupOptions.find(g => g.id === selectedGroup)?.name}`}
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-6 md:grid-cols-2">
@@ -549,7 +487,7 @@ const Scheduling = () => {
                         />
                         <div className="flex-1">
                           <Label htmlFor={`assign-employee-${employee.id}`} className="font-medium cursor-pointer">
-                            {employee.name}
+                            {employee.first_name} {employee.last_name}
                           </Label>
                           <p className="text-sm text-muted-foreground">
                             {employee.position} • {employee.department}
@@ -573,7 +511,7 @@ const Scheduling = () => {
                       </p>
                     ) : (
                       selectedEmployees.map((employeeId) => {
-                        const employee = allEmployees.find(emp => emp.id === employeeId);
+                        const employee = employees.find(emp => emp.id === employeeId);
                         return employee ? (
                           <div key={employee.id} className="flex items-center justify-between p-2 bg-muted rounded-lg">
                             <div>
@@ -606,7 +544,7 @@ const Scheduling = () => {
         )}
 
         {/* Slot Manager Dialog - Admin Only */}
-        {showSlotManager && userRole === "admin" && (
+        {showSlotManager && canManageSchedules && (
           <Dialog open={showSlotManager} onOpenChange={setShowSlotManager}>
             <DialogContent className="max-w-4xl">
               <DialogHeader>
@@ -628,7 +566,7 @@ const Scheduling = () => {
                         <div>
                           <h4 className="font-medium">{slot.name}</h4>
                           <p className="text-sm text-muted-foreground">
-                            {slot.startTime} - {slot.endTime}
+                            {slot.start_time} - {slot.end_time}
                           </p>
                         </div>
                       </div>
@@ -649,7 +587,7 @@ const Scheduling = () => {
         )}
 
         {/* Create/Edit Slot Dialog - Admin Only */}
-        {showSlotDialog && userRole === "admin" && (
+        {showSlotDialog && canManageSchedules && (
           <Dialog open={showSlotDialog} onOpenChange={setShowSlotDialog}>
             <DialogContent>
               <DialogHeader>
