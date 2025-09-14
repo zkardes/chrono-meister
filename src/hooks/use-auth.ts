@@ -186,12 +186,6 @@ export const useAuthActions = () => {
     try {
       console.log('🔑 Attempting sign in for:', email);
       
-      // Clear any existing session first
-      await supabase.auth.signOut();
-      
-      // Short delay to ensure cleanup
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,

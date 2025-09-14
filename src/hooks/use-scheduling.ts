@@ -3,6 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { withRetry, handleDatabaseError } from '@/lib/database-retry';
+
+// Updated with explicit foreign key relationships to fix PGRST201 error
 
 export type TimeSlot = Tables<'time_slots'>;
 export type ScheduleAssignment = Tables<'schedule_assignments'>;
@@ -54,16 +57,21 @@ export const useTimeSlots = (): UseTimeSlotsResult => {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from('time_slots')
-        .select('*')
-        .eq('company_id', company.id)
-        .eq('is_active', true)
-        .order('start_time');
+      const { data, error: fetchError } = await withRetry(async () =>
+        await supabase
+          .from('time_slots')
+          .select('*')
+          .eq('company_id', company.id)
+          .eq('is_active', true)
+          .order('start_time')
+      );
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        const errorMessage = handleDatabaseError(fetchError, 'fetch time slots');
+        throw new Error(errorMessage);
+      }
 
-      setTimeSlots(data || []);
+      setTimeSlots(data as TimeSlot[] || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch time slots';
       setError(errorMessage);
@@ -79,19 +87,24 @@ export const useTimeSlots = (): UseTimeSlotsResult => {
     }
 
     try {
-      const { data, error: insertError } = await supabase
-        .from('time_slots')
-        .insert({
-          ...timeSlot,
-          company_id: company.id,
-          created_by: employee.id,
-        })
-        .select()
-        .single();
+      const { data, error: insertError } = await withRetry(async () =>
+        await supabase
+          .from('time_slots')
+          .insert({
+            ...timeSlot,
+            company_id: company.id,
+            created_by: employee.id,
+          })
+          .select()
+          .single()
+      );
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        const errorMessage = handleDatabaseError(insertError, 'create time slot');
+        throw new Error(errorMessage);
+      }
 
-      setTimeSlots(prev => [...prev, data]);
+      setTimeSlots(prev => [...prev, data as TimeSlot]);
       toast({
         title: "Zeitslot erstellt",
         description: `${timeSlot.name} wurde erfolgreich erstellt.`,
@@ -110,16 +123,21 @@ export const useTimeSlots = (): UseTimeSlotsResult => {
 
   const updateTimeSlot = async (id: string, updates: Partial<TimeSlot>) => {
     try {
-      const { data, error: updateError } = await supabase
-        .from('time_slots')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
+      const { data, error: updateError } = await withRetry(async () =>
+        await supabase
+          .from('time_slots')
+          .update(updates)
+          .eq('id', id)
+          .select()
+          .single()
+      );
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        const errorMessage = handleDatabaseError(updateError, 'update time slot');
+        throw new Error(errorMessage);
+      }
 
-      setTimeSlots(prev => prev.map(slot => slot.id === id ? data : slot));
+      setTimeSlots(prev => prev.map(slot => slot.id === id ? data as TimeSlot : slot));
       toast({
         title: "Zeitslot aktualisiert",
         description: "Der Zeitslot wurde erfolgreich aktualisiert.",
@@ -138,12 +156,17 @@ export const useTimeSlots = (): UseTimeSlotsResult => {
 
   const deleteTimeSlot = async (id: string) => {
     try {
-      const { error: deleteError } = await supabase
-        .from('time_slots')
-        .update({ is_active: false })
-        .eq('id', id);
+      const { error: deleteError } = await withRetry(async () =>
+        await supabase
+          .from('time_slots')
+          .update({ is_active: false })
+          .eq('id', id)
+      );
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        const errorMessage = handleDatabaseError(deleteError, 'delete time slot');
+        throw new Error(errorMessage);
+      }
 
       setTimeSlots(prev => prev.filter(slot => slot.id !== id));
       toast({
@@ -192,27 +215,32 @@ export const useScheduleAssignments = (startDate?: string, endDate?: string): Us
       setLoading(true);
       setError(null);
 
-      let query = supabase
-        .from('schedule_assignments')
-        .select(`
-          *,
-          employees!inner(id, first_name, last_name, employee_id, employee_groups(group:groups(id, name))),
-          time_slots!inner(id, name, start_time, end_time, color)
-        `)
-        .eq('company_id', company.id);
+      const { data, error: fetchError } = await withRetry(async () => {
+        let query = supabase
+          .from('schedule_assignments')
+          .select(`
+            *,
+            employee:employees!schedule_assignments_employee_id_fkey(id, first_name, last_name, employee_id, employee_groups(group:groups(id, name))),
+            time_slot:time_slots!schedule_assignments_time_slot_id_fkey(id, name, start_time, end_time, color)
+          `)
+          .eq('company_id', company.id);
 
-      if (startDate) {
-        query = query.gte('scheduled_date', startDate);
+        if (startDate) {
+          query = query.gte('scheduled_date', startDate);
+        }
+        if (endDate) {
+          query = query.lte('scheduled_date', endDate);
+        }
+
+        return query.order('scheduled_date');
+      });
+
+      if (fetchError) {
+        const errorMessage = handleDatabaseError(fetchError, 'fetch schedule assignments');
+        throw new Error(errorMessage);
       }
-      if (endDate) {
-        query = query.lte('scheduled_date', endDate);
-      }
 
-      const { data, error: fetchError } = await query.order('scheduled_date');
-
-      if (fetchError) throw fetchError;
-
-      setScheduleAssignments(data || []);
+      setScheduleAssignments(data as ScheduleAssignment[] || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch schedule assignments';
       setError(errorMessage);
@@ -227,35 +255,43 @@ export const useScheduleAssignments = (startDate?: string, endDate?: string): Us
       throw new Error('Company and employee required');
     }
 
+    console.log('🔄 assignEmployee called with:', { employeeId, timeSlotId, scheduledDate, notes });
+
     try {
-      const { data, error: insertError } = await supabase
-        .from('schedule_assignments')
-        .insert({
-          company_id: company.id,
-          employee_id: employeeId,
-          time_slot_id: timeSlotId,
-          scheduled_date: scheduledDate,
-          notes: notes || null,
-          created_by: employee.id,
-          status: 'scheduled',
-        })
-        .select(`
-          *,
-          employees!inner(id, first_name, last_name, employee_id, employee_groups(group:groups(id, name))),
-          time_slots!inner(id, name, start_time, end_time, color)
-        `)
-        .single();
+      const { data, error: insertError } = await withRetry(async () => {
+        console.log('🔍 Executing insert operation with explicit relationships');
+        return await supabase
+          .from('schedule_assignments')
+          .insert({
+            company_id: company.id,
+            employee_id: employeeId,
+            time_slot_id: timeSlotId,
+            scheduled_date: scheduledDate,
+            notes: notes || null,
+            created_by: employee.id,
+            status: 'scheduled',
+          })
+          .select(`
+            *,
+            employee:employees!schedule_assignments_employee_id_fkey(id, first_name, last_name, employee_id, employee_groups(group:groups(id, name))),
+            time_slot:time_slots!schedule_assignments_time_slot_id_fkey(id, name, start_time, end_time, color)
+          `)
+          .single();
+      });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        const errorMessage = handleDatabaseError(insertError, 'assign employee');
+        throw new Error(errorMessage);
+      }
 
-      setScheduleAssignments(prev => [...prev, data]);
+      setScheduleAssignments(prev => [...prev, data as ScheduleAssignment]);
       toast({
         title: "Mitarbeiter zugewiesen",
         description: "Der Mitarbeiter wurde erfolgreich der Schicht zugewiesen.",
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to assign employee';
-      if (errorMessage.includes('duplicate key')) {
+      if (errorMessage.includes('duplicate key') || errorMessage.includes('already exists')) {
         toast({
           title: "Mitarbeiter bereits zugewiesen",
           description: "Dieser Mitarbeiter ist bereits für diese Schicht eingeteilt.",
@@ -275,14 +311,19 @@ export const useScheduleAssignments = (startDate?: string, endDate?: string): Us
 
   const unassignEmployee = async (employeeId: string, timeSlotId: string, scheduledDate: string) => {
     try {
-      const { error: deleteError } = await supabase
-        .from('schedule_assignments')
-        .delete()
-        .eq('employee_id', employeeId)
-        .eq('time_slot_id', timeSlotId)
-        .eq('scheduled_date', scheduledDate);
+      const { error: deleteError } = await withRetry(async () => 
+        await supabase
+          .from('schedule_assignments')
+          .delete()
+          .eq('employee_id', employeeId)
+          .eq('time_slot_id', timeSlotId)
+          .eq('scheduled_date', scheduledDate)
+      );
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        const errorMessage = handleDatabaseError(deleteError, 'unassign employee');
+        throw new Error(errorMessage);
+      }
 
       setScheduleAssignments(prev => 
         prev.filter(assignment => 
@@ -310,20 +351,25 @@ export const useScheduleAssignments = (startDate?: string, endDate?: string): Us
 
   const updateAssignment = async (id: string, updates: Partial<ScheduleAssignment>) => {
     try {
-      const { data, error: updateError } = await supabase
-        .from('schedule_assignments')
-        .update(updates)
-        .eq('id', id)
-        .select(`
-          *,
-          employees!inner(id, first_name, last_name, employee_id, employee_groups(group:groups(id, name))),
-          time_slots!inner(id, name, start_time, end_time, color)
-        `)
-        .single();
+      const { data, error: updateError } = await withRetry(async () =>
+        await supabase
+          .from('schedule_assignments')
+          .update(updates)
+          .eq('id', id)
+          .select(`
+            *,
+            employee:employees!schedule_assignments_employee_id_fkey(id, first_name, last_name, employee_id, employee_groups(group:groups(id, name))),
+            time_slot:time_slots!schedule_assignments_time_slot_id_fkey(id, name, start_time, end_time, color)
+          `)
+          .single()
+      );
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        const errorMessage = handleDatabaseError(updateError, 'update assignment');
+        throw new Error(errorMessage);
+      }
 
-      setScheduleAssignments(prev => prev.map(assignment => assignment.id === id ? data : assignment));
+      setScheduleAssignments(prev => prev.map(assignment => assignment.id === id ? data as ScheduleAssignment : assignment));
       toast({
         title: "Zuweisung aktualisiert",
         description: "Die Schichtzuweisung wurde erfolgreich aktualisiert.",
@@ -381,21 +427,26 @@ export const useEmployees = (): UseEmployeesResult => {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from('employees')
-        .select(`
-          *,
-          employee_groups(
-            group:groups(id, name)
-          )
-        `)
-        .eq('company_id', company.id)
-        .eq('is_active', true)
-        .order('first_name');
+      const { data, error: fetchError } = await withRetry(async () =>
+        await supabase
+          .from('employees')
+          .select(`
+            *,
+            employee_groups(
+              group:groups(id, name)
+            )
+          `)
+          .eq('company_id', company.id)
+          .eq('is_active', true)
+          .order('first_name')
+      );
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        const errorMessage = handleDatabaseError(fetchError, 'fetch employees');
+        throw new Error(errorMessage);
+      }
 
-      setEmployees(data || []);
+      setEmployees(data as Employee[] || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch employees';
       setError(errorMessage);

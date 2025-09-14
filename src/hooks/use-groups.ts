@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { withRetry, handleDatabaseError } from '@/lib/database-retry';
 
 export type Group = Tables<'groups'>;
 
@@ -25,15 +26,20 @@ export const useGroups = (): UseGroupsResult => {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from('groups')
-        .select('*')
-        .eq('company_id', company.id)
-        .order('name');
+      const { data, error: fetchError } = await withRetry(async () =>
+        await supabase
+          .from('groups')
+          .select('*')
+          .eq('company_id', company.id)
+          .order('name')
+      );
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        const errorMessage = handleDatabaseError(fetchError, 'fetch groups');
+        throw new Error(errorMessage);
+      }
 
-      setGroups(data || []);
+      setGroups(data as Group[] || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch groups';
       setError(errorMessage);

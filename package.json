@@ -15,7 +15,8 @@
     "supabase:status": "supabase status",
     "supabase:logs": "supabase logs",
     "db:types": "supabase gen types typescript --project-id zcnhuvydqpotvgvwfcxs > src/integrations/supabase/types.ts",
-    "db:seed": "supabase db reset --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+    "db:seed": "supabase db reset --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    "create-users": "node scripts/create-demo-users.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -52,6 +53,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.2",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",

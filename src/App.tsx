@@ -22,8 +22,29 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import "@/lib/debug-auth";
 import "@/lib/auth-test-guide";
 import "@/lib/registration-debug";
+import { setupGlobalErrorHandler } from "@/lib/database-retry";
 
-const queryClient = new QueryClient();
+// Setup global error handling for database operations
+setupGlobalErrorHandler();
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        // Retry authentication-related errors
+        if (error && typeof error === 'object' && 'code' in error) {
+          const pgError = error as any;
+          const retryableCodes = ['PGRST301', 'PGRST300', 'PGRST302', '401', '403'];
+          if (retryableCodes.includes(pgError.code)) {
+            return failureCount < 3;
+          }
+        }
+        return failureCount < 1;
+      },
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

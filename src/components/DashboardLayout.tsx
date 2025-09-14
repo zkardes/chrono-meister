@@ -28,6 +28,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useAuthActions } from "@/hooks/use-auth";
 import { formatEmployeeName, getEmployeeInitials } from "@/lib/employee-utils";
+import SessionStatusBanner from "@/components/SessionStatusBanner";
+import SafariBanner from "@/components/SafariBanner";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -186,6 +188,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
           <div className="flex-1" />
 
+          {/* Session Status - Temporarily disabled */}
+          {/* <SessionStatusCompact className="mr-4" /> */}
+
           {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -228,6 +233,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
         {/* Page content */}
         <main className="p-6">
+          <SafariBanner />
+          <SessionStatusBanner />
           {children}
         </main>
       </div>

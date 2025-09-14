@@ -12,8 +12,8 @@ const Landing = () => {
     },
     {
       icon: FileText,
-      title: "Projektmanagement",
-      description: "Projektzeiten erfassen und direkt für die Abrechnung aufbereiten"
+      title: "Digital Management",
+      description: "Kein Papierkram mehr - Alles digital"
     },
     {
       icon: Users,
@@ -33,7 +33,7 @@ const Landing = () => {
     {
       icon: Shield,
       title: "DSGVO-konform",
-      description: "Höchste Sicherheitsstandards nach deutschem Datenschutz"
+      description: "Höchste Sicherheitsstandards"
     }
   ];
 
@@ -67,6 +67,8 @@ const Landing = () => {
         "Bis zu 5 Mitarbeiter",
         "Digitale Stempeluhr",
         "Pausenregelung",
+        "Urlaubsplanung",
+        "Schichtplanung",
         "Export-Funktion",
         "Email-Support"
       ]
@@ -77,10 +79,11 @@ const Landing = () => {
       description: "Mit Projektmanagement",
       features: [
         "Bis zu 20 Mitarbeiter",
-        "Alles aus Starter",
-        "Projektzeiterfassung",
-        "Urlaubsverwaltung",
-        "Gruppen & Teams",
+        "Digitale Stempeluhr",
+        "Pausenregelung",
+        "Urlaubsplanung",
+        "Schichtplanung",
+        "Export-Funktion",
         "Priority-Support"
       ],
       popular: true
@@ -90,11 +93,12 @@ const Landing = () => {
       price: "39,90",
       description: "Vollausstattung",
       features: [
-        "Unbegrenzte Mitarbeiter",
-        "Alles aus Projekt",
+        "Bis zu 100 Mitarbeiter",
+        "Digitale Stempeluhr",
+        "Pausenregelung",
+        "Urlaubsplanung",
         "Schichtplanung",
-        "API-Zugang",
-        "Lexware-Integration",
+        "Export-Funktion",
         "Persönlicher Support"
       ]
     }
@@ -124,7 +128,7 @@ const Landing = () => {
                 <Button variant="outline">Anmelden</Button>
               </Link>
               <Link to="/register">
-                <Button variant="hero">Kostenlos testen</Button>
+                <Button variant="hero">Registrieren</Button>
               </Link>
             </div>
           </div>
@@ -135,23 +139,25 @@ const Landing = () => {
       <section className="container mx-auto px-6 py-20">
         <div className="max-w-4xl mx-auto text-center animate-slide-up">
           <h1 className="text-5xl md:text-6xl font-bold mb-6">
-            Zeiterfassung für moderne
+            Zeiterfassung für kleine
             <span className="text-primary"> Unternehmen</span>
           </h1>
           <p className="text-xl text-muted-foreground mb-8">
-            Digitalisieren Sie Ihre Arbeitszeiterfassung, Projektmanagement und Mitarbeiterverwaltung.
-            DSGVO-konform, einfach zu bedienen und in unter 10 Minuten eingerichtet.
+            Digitalisieren Sie Ihre Arbeitszeiterfassung und Mitarbeiterverwaltung.
+            <br/>Einfach zu bedienen und in unter 10 Minuten eingerichtet.
           </p>
           <div className="flex gap-4 justify-center">
             <Link to="/register">
               <Button size="xl" variant="hero">
                 <Zap className="mr-2" />
-                Jetzt starten - 30 Tage kostenlos
+                Jetzt starten
               </Button>
             </Link>
+            <Link to="/login">
             <Button size="xl" variant="outline">
               Demo ansehen
             </Button>
+            </Link>
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
             Keine Kreditkarte erforderlich • Keine Kündigungsfrist

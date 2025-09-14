@@ -581,6 +581,60 @@ export type Database = {
           },
         ]
       }
+      vacation_entitlements: {
+        Row: {
+          id: string
+          employee_id: string
+          year: number
+          total_days: number
+          carried_over_days: number
+          bonus_days: number
+          notes: string | null
+          created_at: string | null
+          updated_at: string | null
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          employee_id: string
+          year?: number
+          total_days?: number
+          carried_over_days?: number
+          bonus_days?: number
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          employee_id?: string
+          year?: number
+          total_days?: number
+          carried_over_days?: number
+          bonus_days?: number
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vacation_entitlements_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacation_entitlements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

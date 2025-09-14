@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Tables } from '@/integrations/supabase/types';
+import { withRetry, handleDatabaseError } from '@/lib/database-retry';
 
 type Employee = Tables<'employees'>;
 type Group = Tables<'groups'>;
@@ -18,14 +19,19 @@ export const useCompanyEmployees = () => {
     queryFn: async () => {
       if (!company?.id) return [];
 
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('company_id', company.id)
-        .eq('is_active', true)
-        .order('first_name');
+      const { data, error } = await withRetry(async () =>
+        await supabase
+          .from('employees')
+          .select('*')
+          .eq('company_id', company.id)
+          .eq('is_active', true)
+          .order('first_name')
+      );
 
-      if (error) throw error;
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'fetch company employees');
+        throw new Error(errorMessage);
+      }
       return data as Employee[];
     },
     enabled: !!company?.id,
@@ -41,16 +47,21 @@ export const useCompanyGroups = () => {
     queryFn: async () => {
       if (!company?.id) return [];
 
-      const { data, error } = await supabase
-        .from('groups')
-        .select(`
-          *,
-          manager:employees!groups_manager_id_fkey(first_name, last_name)
-        `)
-        .eq('company_id', company.id)
-        .order('name');
+      const { data, error } = await withRetry(async () =>
+        await supabase
+          .from('groups')
+          .select(`
+            *,
+            manager:employees!groups_manager_id_fkey(first_name, last_name)
+          `)
+          .eq('company_id', company.id)
+          .order('name')
+      );
 
-      if (error) throw error;
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'fetch company groups');
+        throw new Error(errorMessage);
+      }
       return data as (Group & { manager: Pick<Employee, 'first_name' | 'last_name'> | null })[];
     },
     enabled: !!company?.id,
@@ -66,24 +77,29 @@ export const useCompanyTimeEntries = (startDate?: string, endDate?: string) => {
     queryFn: async () => {
       if (!company?.id) return [];
 
-      let query = supabase
-        .from('time_entries')
-        .select(`
-          *,
-          employee:employees!time_entries_employee_id_fkey(first_name, last_name, company_id)
-        `)
-        .order('start_time', { ascending: false });
+      const { data, error } = await withRetry(async () => {
+        let query = supabase
+          .from('time_entries')
+          .select(`
+            *,
+            employee:employees!time_entries_employee_id_fkey(first_name, last_name, company_id)
+          `)
+          .order('start_time', { ascending: false });
 
-      if (startDate) {
-        query = query.gte('start_time', startDate);
+        if (startDate) {
+          query = query.gte('start_time', startDate);
+        }
+        if (endDate) {
+          query = query.lte('start_time', endDate);
+        }
+
+        return query;
+      });
+
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'fetch company time entries');
+        throw new Error(errorMessage);
       }
-      if (endDate) {
-        query = query.lte('start_time', endDate);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
 
       // Filter by company on the client side as an extra security measure
       return (data as (TimeEntry & { employee: Employee | null })[])
@@ -102,15 +118,20 @@ export const useCompanyVacationRequests = () => {
     queryFn: async () => {
       if (!company?.id) return [];
 
-      const { data, error } = await supabase
-        .from('vacation_requests')
-        .select(`
-          *,
-          employee:employees!vacation_requests_employee_id_fkey(first_name, last_name, company_id)
-        `)
-        .order('created_at', { ascending: false });
+      const { data, error } = await withRetry(async () =>
+        await supabase
+          .from('vacation_requests')
+          .select(`
+            *,
+            employee:employees!vacation_requests_employee_id_fkey(first_name, last_name, company_id)
+          `)
+          .order('created_at', { ascending: false })
+      );
 
-      if (error) throw error;
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'fetch company vacation requests');
+        throw new Error(errorMessage);
+      }
 
       // Filter by company on the client side as an extra security measure
       return (data as (VacationRequest & { employee: Employee | null })[])
@@ -129,24 +150,29 @@ export const useCompanySchedules = (startDate?: string, endDate?: string) => {
     queryFn: async () => {
       if (!company?.id) return [];
 
-      let query = supabase
-        .from('schedules')
-        .select(`
-          *,
-          employee:employees!schedules_employee_id_fkey(first_name, last_name, company_id)
-        `)
-        .order('date');
+      const { data, error } = await withRetry(async () => {
+        let query = supabase
+          .from('schedules')
+          .select(`
+            *,
+            employee:employees!schedules_employee_id_fkey(first_name, last_name, company_id)
+          `)
+          .order('date');
 
-      if (startDate) {
-        query = query.gte('date', startDate);
+        if (startDate) {
+          query = query.gte('date', startDate);
+        }
+        if (endDate) {
+          query = query.lte('date', endDate);
+        }
+
+        return query;
+      });
+
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'fetch company schedules');
+        throw new Error(errorMessage);
       }
-      if (endDate) {
-        query = query.lte('date', endDate);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
 
       // Filter by company on the client side as an extra security measure
       return (data as (Schedule & { employee: Employee | null })[])

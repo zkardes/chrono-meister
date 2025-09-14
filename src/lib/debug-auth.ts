@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { safariStorageAdapter } from './safari-storage-adapter';
 
 export const debugAuth = {
   async testConnection() {
@@ -79,6 +80,10 @@ export const debugAuth = {
     console.log('🔍 Checking localStorage...');
     
     try {
+      // Check Safari storage adapter info
+      const storageInfo = safariStorageAdapter.getStorageInfo();
+      console.log('🦁 Safari storage adapter info:', storageInfo);
+      
       const keys = Object.keys(localStorage).filter(key => 
         key.includes('supabase') || key.includes('auth')
       );

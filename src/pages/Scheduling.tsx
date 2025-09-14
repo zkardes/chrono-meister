@@ -9,13 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronLeft, ChevronRight, Users, Plus, Settings, Edit, Trash2, Clock, X, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Users, Plus, Settings, Edit, Trash2, Clock, X, Loader2, AlertTriangle } from "lucide-react";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, isSameDay } from "date-fns";
 import { de } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { useTimeSlots, useScheduleAssignments, useEmployees } from "@/hooks/use-scheduling";
 import { useGroups } from "@/hooks/use-groups";
+import { useVacationConstraints } from "@/hooks/use-vacation";
 
 const Scheduling = () => {
   const { toast } = useToast();
@@ -46,6 +47,7 @@ const Scheduling = () => {
   } = useScheduleAssignments(format(weekStart, 'yyyy-MM-dd'), format(weekEnd, 'yyyy-MM-dd'));
   const { employees, loading: employeesLoading, getEmployeesByGroup } = useEmployees();
   const { groups, loading: groupsLoading } = useGroups();
+  const { canAssignEmployee, getVacationStatusMessage } = useVacationConstraints();
   
   // Loading state
   const isLoading = timeSlotsLoading || assignmentsLoading || employeesLoading || groupsLoading;
@@ -91,8 +93,10 @@ const Scheduling = () => {
     
     const assignedEmployees = assignments
       .map(assignment => {
-        // Find the employee from our employees list since the assignment contains employee_id
-        return employees.find(emp => emp.id === assignment.employee_id);
+        // With the new structure, employee data is embedded in the assignment
+        // but we need to find the full employee from our employees list for group filtering
+        const assignmentEmployee = assignment as any; // Type assertion for embedded data
+        return employees.find(emp => emp.id === assignment.employee_id) || assignmentEmployee.employee;
       })
       .filter(Boolean);
     
@@ -125,6 +129,19 @@ const Scheduling = () => {
     if (canManageSchedules || !employee) return;
     
     const hasAssignment = hasEmployeeAssignment(day, timeSlotId);
+    const dateKey = format(day, "yyyy-MM-dd");
+    
+    // Check vacation constraint when trying to assign
+    if (!hasAssignment && !canAssignEmployee(employee.id, dateKey)) {
+      const vacationMessage = getVacationStatusMessage(employee.id, dateKey);
+      toast({
+        title: "Urlaubskonflikt",
+        description: vacationMessage || "Sie können sich nicht für diese Schicht anmelden, da Sie im Urlaub sind.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     const actionText = hasAssignment ? "abmelden" : "anmelden";
     const confirmText = hasAssignment 
       ? "Möchten Sie sich von dieser Schicht abmelden?" 
@@ -132,8 +149,6 @@ const Scheduling = () => {
     
     if (window.confirm(confirmText)) {
       try {
-        const dateKey = format(day, "yyyy-MM-dd");
-        
         if (hasAssignment) {
           await unassignEmployee(employee.id, timeSlotId, dateKey);
         } else {
@@ -172,9 +187,29 @@ const Scheduling = () => {
       return;
     }
 
+    const dateKey = format(selectedSlot.day, "yyyy-MM-dd");
+    
+    // Check vacation constraints for all selected employees
+    const vacationConflicts: string[] = [];
+    for (const employeeId of selectedEmployees) {
+      if (!canAssignEmployee(employeeId, dateKey)) {
+        const employee = employees.find(emp => emp.id === employeeId);
+        const employeeName = employee ? formatEmployeeName(employee) : 'Unknown';
+        const vacationMessage = getVacationStatusMessage(employeeId, dateKey);
+        vacationConflicts.push(`${employeeName}: ${vacationMessage || 'Im Urlaub'}`);
+      }
+    }
+    
+    if (vacationConflicts.length > 0) {
+      toast({
+        title: "Urlaubskonflikte gefunden",
+        description: `Folgende Mitarbeiter können nicht zugewiesen werden:\n${vacationConflicts.join('\n')}`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
-      const dateKey = format(selectedSlot.day, "yyyy-MM-dd");
-      
       // Assign all selected employees
       for (const employeeId of selectedEmployees) {
         await assignEmployee(employeeId, selectedSlot.timeSlotId, dateKey);
@@ -289,6 +324,12 @@ const Scheduling = () => {
           <div className="flex flex-col items-center space-y-4">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="text-muted-foreground">Schichtpläne werden geladen...</p>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div>Zeitslots: {timeSlotsLoading ? 'Laden...' : 'Geladen'}</div>
+              <div>Zuweisungen: {assignmentsLoading ? 'Laden...' : 'Geladen'}</div>
+              <div>Mitarbeiter: {employeesLoading ? 'Laden...' : 'Geladen'}</div>
+              <div>Gruppen: {groupsLoading ? 'Laden...' : 'Geladen'}</div>
+            </div>
           </div>
         </div>
       </DashboardLayout>
@@ -406,26 +447,41 @@ const Scheduling = () => {
                         >
                           <div className="space-y-1">
                             {employees.length > 0 ? (
-                              employees.map((employee) => (
-                                <div key={employee?.id} className="flex items-center justify-between">
-                                  <Badge variant="secondary" className="text-xs flex-1 mr-1">
-                                    {!canManageSchedules ? "Ihre Schicht" : (employee ? formatEmployeeName(employee) : "Unknown")}
-                                  </Badge>
-                                  {(canManageSchedules || (!canManageSchedules && employee?.id === employee?.id)) && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-4 w-4 p-0 opacity-50 hover:opacity-100"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (employee?.id) removeEmployeeFromSlot(day, slot.id, employee.id);
-                                      }}
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </Button>
-                                  )}
-                                </div>
-                              ))
+                              employees.map((employee) => {
+                                const dateKey = format(day, "yyyy-MM-dd");
+                                const isOnVacation = !canAssignEmployee(employee?.id || '', dateKey);
+                                
+                                return (
+                                  <div key={employee?.id} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1 flex-1 mr-1">
+                                      <Badge 
+                                        variant="secondary" 
+                                        className={`text-xs flex-1 ${
+                                          isOnVacation ? 'bg-orange-100 text-orange-800 border-orange-300' : ''
+                                        }`}
+                                      >
+                                        {!canManageSchedules ? "Ihre Schicht" : (employee ? formatEmployeeName(employee) : "Unknown")}
+                                      </Badge>
+                                      {isOnVacation && (
+                                        <AlertTriangle className="h-3 w-3 text-orange-500 flex-shrink-0" />
+                                      )}
+                                    </div>
+                                    {(canManageSchedules || (!canManageSchedules && employee?.id === employee?.id)) && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-4 w-4 p-0 opacity-50 hover:opacity-100"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (employee?.id) removeEmployeeFromSlot(day, slot.id, employee.id);
+                                        }}
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                );
+                              })
                             ) : (
                               <div className="flex items-center justify-center h-[60px]">
                                 {!canManageSchedules ? (
@@ -478,23 +534,47 @@ const Scheduling = () => {
                 <div>
                   <h4 className="font-medium mb-3">Verfügbare Mitarbeiter</h4>
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {getAvailableEmployees().map((employee) => (
-                      <div key={employee.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted">
-                        <Checkbox
-                          id={`assign-employee-${employee.id}`}
-                          checked={selectedEmployees.includes(employee.id)}
-                          onCheckedChange={() => toggleEmployeeSelection(employee.id)}
-                        />
-                        <div className="flex-1">
-                          <Label htmlFor={`assign-employee-${employee.id}`} className="font-medium cursor-pointer">
-                            {employee.first_name} {employee.last_name}
-                          </Label>
-                          <p className="text-sm text-muted-foreground">
-                            {employee.position} • {employee.department}
-                          </p>
+                    {getAvailableEmployees().map((employee) => {
+                      const dateKey = format(selectedSlot.day, "yyyy-MM-dd");
+                      const isOnVacation = !canAssignEmployee(employee.id, dateKey);
+                      const vacationMessage = getVacationStatusMessage(employee.id, dateKey);
+                      
+                      return (
+                        <div key={employee.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted">
+                          <Checkbox
+                            id={`assign-employee-${employee.id}`}
+                            checked={selectedEmployees.includes(employee.id)}
+                            onCheckedChange={() => toggleEmployeeSelection(employee.id)}
+                            disabled={isOnVacation}
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor={`assign-employee-${employee.id}`} className={`font-medium cursor-pointer ${
+                                isOnVacation ? 'text-muted-foreground line-through' : ''
+                              }`}>
+                                {employee.first_name} {employee.last_name}
+                              </Label>
+                              {isOnVacation && (
+                                <div className="flex items-center gap-1">
+                                  <AlertTriangle className="h-4 w-4 text-orange-500" />
+                                  <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">
+                                    Im Urlaub
+                                  </Badge>
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {employee.position} • {employee.department}
+                            </p>
+                            {isOnVacation && vacationMessage && (
+                              <p className="text-xs text-orange-600 mt-1">
+                                {vacationMessage}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {getAvailableEmployees().length === 0 && (
                       <p className="text-muted-foreground text-sm text-center py-8">
                         Keine Mitarbeiter in der ausgewählten Gruppe verfügbar

@@ -14,28 +14,12 @@ import { Calendar as CalendarIcon, Plus, Check, X, User, Clock, FileText, Settin
 import { useToast } from "@/hooks/use-toast";
 import { format, addDays, isWithinInterval, startOfDay } from "date-fns";
 import { de } from "date-fns/locale";
+import { useVacation, type VacationRequest, type Employee } from "@/hooks/use-vacation";
+import { useCompanyEmployees } from "@/hooks/use-company-data";
+import { useAuthContext } from "@/contexts/AuthContext";
+import VacationEntitlementsManager from "@/components/VacationEntitlementsManager";
 
-interface Employee {
-  id: number;
-  name: string;
-  email: string;
-  position: string;
-  department: string;
-}
-
-interface VacationRequest {
-  id: number;
-  employeeId: number;
-  employeeName: string;
-  startDate: string;
-  endDate: string;
-  days: number;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected';
-  requestDate: string;
-  adminNote?: string;
-  isOvertimeRequest?: boolean; // Flag to identify overtime-based requests
-}
+// Using types from the vacation hook instead of local interfaces
 
 interface OvertimeRecord {
   id: number;
@@ -61,147 +45,42 @@ const Vacation = () => {
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showOvertimeDialog, setShowOvertimeDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState("all");
+  const [adminNote, setAdminNote] = useState("");
   
-  // Get user role from localStorage (similar to other pages)
-  const userRole = localStorage.getItem("userRole") || "employee";
-  const currentUserId = parseInt(localStorage.getItem("currentUserId") || "1");
+  // Auth context and database hooks
+  const { employee, isAdmin, company } = useAuthContext();
+  const { data: companyEmployees = [], isLoading: employeesLoading } = useCompanyEmployees();
+  const {
+    vacationRequests,
+    loading: vacationLoading,
+    error: vacationError,
+    submitRequest,
+    approveRequest,
+    deleteRequest,
+    getVacationStats,
+    getEmployeeVacationDays
+  } = useVacation();
 
-  // Sample data - would come from API in real application
-  const allEmployees: Employee[] = [
-    { id: 1, name: "Max Mustermann", email: "max.mustermann@company.com", position: "Erzieher", department: "Kita" },
-    { id: 2, name: "Anna Schmidt", email: "anna.schmidt@company.com", position: "Erzieherin", department: "Kita" },
-    { id: 3, name: "Thomas Weber", email: "thomas.weber@company.com", position: "Kita - Leitung", department: "Management" },
-    { id: 4, name: "Lisa Müller", email: "lisa.mueller@company.com", position: "FSJ", department: "Ausbildung" },
-  ];
-
-  // Vacation entitlements by employee (would come from API/database)
-  const vacationEntitlements: Record<number, number> = {
-    1: 30, // Max Mustermann
-    2: 28, // Anna Schmidt
-    3: 35, // Thomas Weber (management gets more days)
-    4: 24, // Lisa Müller (FSJ gets fewer days)
-  };
-
-  // Sample overtime data - would come from API in real application
-  const [overtimeRecords] = useState<OvertimeRecord[]>([]);
-
-  // Get time tracking data for overtime calculation (in real app, this would come from API)
-  const getTimeTrackingData = (): TimeEntry[] => {
-    return [
-      { id: 1, date: "2024-01-15", start: "09:00", end: "12:30", duration: "3h 30min", description: "Vormittagsarbeit" },
-      { id: 2, date: "2024-01-15", start: "13:30", end: "19:45", duration: "6h 15min", description: "Nachmittagsarbeit mit Überstunden" },
-      { id: 3, date: "2024-01-14", start: "08:30", end: "12:00", duration: "3h 30min", description: "Vormittagsschicht" },
-      { id: 4, date: "2024-01-14", start: "13:00", end: "19:30", duration: "6h 30min", description: "Nachmittagsschicht mit Überstunden" },
-      { id: 5, date: "2024-01-16", start: "08:00", end: "20:00", duration: "12h 00min", description: "Langer Arbeitstag mit 4h Überstunden" },
-      { id: 6, date: "2024-01-17", start: "09:00", end: "19:00", duration: "10h 00min", description: "Weiterer Tag mit 2h Überstunden" },
-    ];
-  };
-
-  // Get employee's configured work hours from Settings
-  const getEmployeeWorkHours = (employeeId: number): number => {
-    const workHourSettings = localStorage.getItem("workHourSettings");
-    if (workHourSettings) {
-      const settings = JSON.parse(workHourSettings);
-      const employeeSetting = settings.find((setting: any) => setting.employeeId === employeeId);
-      if (employeeSetting) {
-        return employeeSetting.workHoursPerDay;
-      }
+  // Format employee name according to specification
+  const formatEmployeeName = (emp: Employee): string => {
+    if (!emp) return 'Unknown';
+    const fullName = `${emp.first_name} ${emp.last_name}`;
+    const nameParts = fullName.split(' ');
+    if (nameParts.length >= 2) {
+      const firstName = nameParts[0];
+      const lastNameInitial = nameParts[nameParts.length - 1].charAt(0);
+      return `${firstName}. ${lastNameInitial}`;
     }
-    // Default to 8 hours if no setting found
-    return 8;
+    return fullName;
   };
 
-  // Calculate overtime from time tracking data
-  const calculateOvertimeFromTimeTracking = (employeeId: number) => {
-    const timeEntries = getTimeTrackingData();
-    const EMPLOYEE_WORK_HOURS = getEmployeeWorkHours(employeeId);
-    const MINUTES_PER_HOUR = 60;
-    const EMPLOYEE_WORK_MINUTES = EMPLOYEE_WORK_HOURS * MINUTES_PER_HOUR;
-
-    const calculateDurationInMinutes = (start: string, end: string): number => {
-      const startTime = new Date(`2024-01-01T${start}:00`);
-      const endTime = new Date(`2024-01-01T${end}:00`);
-      return Math.abs(endTime.getTime() - startTime.getTime()) / (1000 * 60);
-    };
-
-    const calculateDailyWorkedMinutes = (date: string): number => {
-      return timeEntries
-        .filter(entry => entry.date === date)
-        .reduce((total, entry) => {
-          return total + calculateDurationInMinutes(entry.start, entry.end);
-        }, 0);
-    };
-
-    const getUniqueDates = (): string[] => {
-      return Array.from(new Set(timeEntries.map(entry => entry.date))).sort();
-    };
-
-    const uniqueDates = getUniqueDates();
-    const totalOvertimeMinutes = uniqueDates.reduce((total, date) => {
-      const workedMinutes = calculateDailyWorkedMinutes(date);
-      const overtimeMinutes = Math.max(0, workedMinutes - EMPLOYEE_WORK_MINUTES);
-      return total + overtimeMinutes;
-    }, 0);
-
-    const totalOvertimeHours = totalOvertimeMinutes / MINUTES_PER_HOUR;
-    const availableOvertimeDays = Math.floor(totalOvertimeHours / EMPLOYEE_WORK_HOURS);
-    const usedOvertimeDays = vacationRequests
-      .filter(req => req.employeeId === employeeId && req.isOvertimeRequest && req.status === 'approved')
-      .reduce((sum, req) => sum + req.days, 0);
-
-    return {
-      totalOvertimeHours,
-      availableOvertimeDays: Math.max(0, availableOvertimeDays - usedOvertimeDays),
-      usedOvertimeDays,
-      remainingOvertimeHours: totalOvertimeHours % EMPLOYEE_WORK_HOURS
-    };
-  };
-
-  const [overtimeForm, setOvertimeForm] = useState({
-    requestedDays: 1,
-    reason: "",
-    startDate: "",
-    endDate: ""
-  });
-
-  const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>([
-    {
-      id: 1,
-      employeeId: 1,
-      employeeName: "Max Mustermann",
-      startDate: "2024-02-15",
-      endDate: "2024-02-19",
-      days: 5,
-      reason: "Familienurlaub",
-      status: "approved",
-      requestDate: "2024-01-20"
-    },
-    {
-      id: 2,
-      employeeId: 2,
-      employeeName: "Anna Schmidt",
-      startDate: "2024-03-01",
-      endDate: "2024-03-05",
-      days: 5,
-      reason: "Erholung",
-      status: "pending",
-      requestDate: "2024-01-25"
-    },
-    {
-      id: 3,
-      employeeId: 1,
-      employeeName: "Max Mustermann",
-      startDate: "2024-04-10",
-      endDate: "2024-04-12",
-      days: 3,
-      reason: "Persönliche Angelegenheiten",
-      status: "pending",
-      requestDate: "2024-02-01"
-    }
-  ]);
+  // Get current employee ID
+  const currentEmployeeId = employee?.id || '';
+  
+  // Get vacation statistics for current employee
+  const vacationStats = getVacationStats(currentEmployeeId);
 
   const [requestForm, setRequestForm] = useState({
     startDate: "",
@@ -209,92 +88,51 @@ const Vacation = () => {
     reason: ""
   });
 
-  // Calculate vacation statistics for a specific employee
-  const calculateVacationStats = (employeeId: number) => {
-    const totalDays = vacationEntitlements[employeeId] || 30;
-    const employeeRequests = vacationRequests.filter(req => req.employeeId === employeeId);
-    
-    const usedDays = employeeRequests
-      .filter(req => req.status === 'approved')
-      .reduce((sum, req) => sum + req.days, 0);
-    
-    const pendingDays = employeeRequests
-      .filter(req => req.status === 'pending')
-      .reduce((sum, req) => sum + req.days, 0);
-    
-    const remainingDays = totalDays - usedDays;
-    const availableDays = remainingDays - pendingDays;
-    
-    return {
-      totalDays,
-      usedDays,
-      pendingDays,
-      remainingDays,
-      availableDays
-    };
+  // Calculate vacation statistics for a specific employee - now uses database hook
+  const calculateVacationStats = (employeeId: string) => {
+    return getVacationStats(employeeId);
   };
 
   // Calculate team-wide statistics for admin view
   const calculateTeamStats = () => {
-    const totalTeamDays = Object.values(vacationEntitlements).reduce((sum, days) => sum + days, 0);
-    
-    const usedTeamDays = vacationRequests
-      .filter(req => req.status === 'approved')
-      .reduce((sum, req) => sum + req.days, 0);
-    
-    const pendingTeamDays = vacationRequests
-      .filter(req => req.status === 'pending')
-      .reduce((sum, req) => sum + req.days, 0);
-    
-    const remainingTeamDays = totalTeamDays - usedTeamDays;
-    
-    return {
-      totalDays: totalTeamDays,
-      usedDays: usedTeamDays,
-      pendingDays: pendingTeamDays,
-      remainingDays: remainingTeamDays,
-      availableDays: remainingTeamDays - pendingTeamDays
-    };
-  };
+    if (!companyEmployees.length || !vacationRequests.length) {
+      return {
+        totalDays: 0,
+        usedDays: 0,
+        pendingDays: 0,
+        remainingDays: 0,
+        availableDays: 0
+      };
+    }
 
-  // Get statistics based on user role
-  const getVacationStats = () => {
-    // Both admin and employee see their personal statistics
-    return calculateVacationStats(currentUserId);
-  };
+    // Sum up all employees' vacation stats
+    const teamStats = companyEmployees.reduce(
+      (acc, emp) => {
+        const empStats = getVacationStats(emp.id);
+        return {
+          totalDays: acc.totalDays + empStats.totalDays,
+          usedDays: acc.usedDays + empStats.usedDays,
+          pendingDays: acc.pendingDays + empStats.pendingDays,
+          remainingDays: acc.remainingDays + empStats.remainingDays,
+          availableDays: acc.availableDays + empStats.availableDays
+        };
+      },
+      { totalDays: 0, usedDays: 0, pendingDays: 0, remainingDays: 0, availableDays: 0 }
+    );
 
-  const vacationStats = getVacationStats();
+    return teamStats;
+  };
 
   // Check if employee can request more vacation days
   const canRequestVacation = (): boolean => {
-    if (userRole === "admin") return true; // Admin can always create requests for testing
-    
-    const userStats = calculateVacationStats(currentUserId);
-    return userStats.availableDays > 0;
+    if (isAdmin) return true; // Admin can always create requests
+    return vacationStats.availableDays > 0;
   };
 
   // Get maximum requestable days
   const getMaxRequestableDays = (): number => {
-    if (userRole === "admin") return 365; // Admin can request any amount for testing
-    
-    const userStats = calculateVacationStats(currentUserId);
-    return Math.max(0, userStats.availableDays);
-  };
-
-  // Calculate overtime statistics for a specific employee
-  const calculateOvertimeStats = (employeeId: number) => {
-    return calculateOvertimeFromTimeTracking(employeeId);
-  };
-
-  // Format employee name according to specification
-  const formatEmployeeName = (employee: Employee): string => {
-    const nameParts = employee.name.split(' ');
-    if (nameParts.length >= 2) {
-      const firstName = nameParts[0];
-      const lastNameInitial = nameParts[nameParts.length - 1].charAt(0);
-      return `${firstName}. ${lastNameInitial}`;
-    }
-    return employee.name;
+    if (isAdmin) return 365; // Admin can request any amount
+    return Math.max(0, vacationStats.availableDays);
   };
 
   // Calculate days between dates
@@ -307,19 +145,11 @@ const Vacation = () => {
   };
 
   // Filter vacation requests based on user role and selected employee
-  const getFilteredRequests = (): VacationRequest[] => {
+  const getFilteredRequests = () => {
     let filtered = vacationRequests;
-    
-    if (userRole === "employee") {
-      // Employees can see all requests but only edit their own
-      filtered = vacationRequests;
-    } else {
-      // Admin sees all requests
-      filtered = vacationRequests;
-    }
 
     if (selectedEmployee !== "all") {
-      filtered = filtered.filter(req => req.employeeId === parseInt(selectedEmployee));
+      filtered = filtered.filter(req => req.employee_id === selectedEmployee);
     }
 
     return filtered;
@@ -331,8 +161,8 @@ const Vacation = () => {
     const approvedRequests = vacationRequests.filter(req => req.status === 'approved');
     
     approvedRequests.forEach(request => {
-      const start = new Date(request.startDate);
-      const end = new Date(request.endDate);
+      const start = new Date(request.start_date);
+      const end = new Date(request.end_date);
       
       for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
         vacationDays.push(new Date(d));
@@ -343,7 +173,7 @@ const Vacation = () => {
   };
 
   // Handle vacation request submission
-  const handleSubmitRequest = () => {
+  const handleSubmitRequest = async () => {
     if (!requestForm.startDate || !requestForm.endDate || !requestForm.reason) {
       toast({
         title: "Fehler",
@@ -357,7 +187,7 @@ const Vacation = () => {
     const maxDays = getMaxRequestableDays();
     
     // Check if user has enough vacation days available
-    if (userRole !== "admin" && requestedDays > maxDays) {
+    if (!isAdmin && requestedDays > maxDays) {
       toast({
         title: "Nicht genügend Urlaubstage",
         description: `Sie haben nur noch ${maxDays} Urlaubstage verfügbar. Sie können nicht ${requestedDays} Tage beantragen.`,
@@ -366,66 +196,54 @@ const Vacation = () => {
       return;
     }
 
-    const currentEmployee = allEmployees.find(emp => emp.id === currentUserId);
-    
-    const newRequest: VacationRequest = {
-      id: Math.max(...vacationRequests.map(r => r.id)) + 1,
-      employeeId: currentUserId,
-      employeeName: currentEmployee?.name || "Unknown",
-      startDate: requestForm.startDate,
-      endDate: requestForm.endDate,
-      days: requestedDays,
-      reason: requestForm.reason,
-      status: "pending",
-      requestDate: format(new Date(), "yyyy-MM-dd")
-    };
-
-    setVacationRequests(prev => [...prev, newRequest]);
-    setRequestForm({ startDate: "", endDate: "", reason: "" });
-    setShowRequestDialog(false);
-    
-    toast({
-      title: "Urlaubsantrag eingereicht",
-      description: "Ihr Urlaubsantrag wurde erfolgreich eingereicht und wartet auf Genehmigung."
-    });
+    try {
+      await submitRequest({
+        start_date: requestForm.startDate,
+        end_date: requestForm.endDate,
+        days_requested: requestedDays,
+        reason: requestForm.reason
+      });
+      
+      setRequestForm({ startDate: "", endDate: "", reason: "" });
+      setShowRequestDialog(false);
+    } catch (error) {
+      // Error handling is done in the hook
+      console.error('Error submitting request:', error);
+    }
   };
 
   // Handle admin approval/rejection
-  const handleApprovalAction = (action: 'approved' | 'rejected', adminNote?: string) => {
+  const handleApprovalAction = async (action: 'approved' | 'rejected') => {
     if (!selectedRequest) return;
 
-    setVacationRequests(prev => 
-      prev.map(req => 
-        req.id === selectedRequest.id 
-          ? { ...req, status: action, adminNote }
-          : req
-      )
-    );
-
-    setShowApprovalDialog(false);
-    setSelectedRequest(null);
-    
-    toast({
-      title: action === 'approved' ? "Antrag genehmigt" : "Antrag abgelehnt",
-      description: `Der Urlaubsantrag von ${selectedRequest.employeeName} wurde ${action === 'approved' ? 'genehmigt' : 'abgelehnt'}.`
-    });
+    try {
+      await approveRequest(selectedRequest.id, {
+        status: action,
+        admin_note: adminNote
+      });
+      
+      setShowApprovalDialog(false);
+      setSelectedRequest(null);
+      setAdminNote("");
+    } catch (error) {
+      // Error handling is done in the hook
+      console.error('Error approving request:', error);
+    }
   };
 
   // Handle vacation request deletion/revocation
-  const handleDeleteRequest = () => {
+  const handleDeleteRequest = async () => {
     if (!selectedRequest) return;
 
-    setVacationRequests(prev => 
-      prev.filter(req => req.id !== selectedRequest.id)
-    );
-
-    setShowDeleteDialog(false);
-    setSelectedRequest(null);
-    
-    toast({
-      title: "Urlaubsantrag storniert",
-      description: "Ihr Urlaubsantrag wurde erfolgreich storniert."
-    });
+    try {
+      await deleteRequest(selectedRequest.id);
+      
+      setShowDeleteDialog(false);
+      setSelectedRequest(null);
+    } catch (error) {
+      // Error handling is done in the hook
+      console.error('Error deleting request:', error);
+    }
   };
 
   // Get status badge styling
@@ -444,61 +262,14 @@ const Vacation = () => {
 
   // Check if employee can edit this request
   const canEditRequest = (request: VacationRequest): boolean => {
-    if (userRole === "admin") return true;
-    return request.employeeId === currentUserId && request.status === 'pending';
+    if (isAdmin) return true;
+    return request.employee_id === currentEmployeeId && request.status === 'pending';
   };
 
   // Check if employee can delete/revoke this request
   const canDeleteRequest = (request: VacationRequest): boolean => {
-    if (userRole === "admin") return true;
-    return request.employeeId === currentUserId && (request.status === 'approved' || request.status === 'pending');
-  };
-
-  // Handle overtime-based vacation request
-  const handleOvertimeRequest = () => {
-    if (!overtimeForm.reason || overtimeForm.requestedDays <= 0 || !overtimeForm.startDate || !overtimeForm.endDate) {
-      toast({
-        title: "Fehler",
-        description: "Bitte füllen Sie alle Felder aus.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const overtimeStats = calculateOvertimeStats(currentUserId);
-    
-    if (overtimeForm.requestedDays > overtimeStats.availableOvertimeDays) {
-      toast({
-        title: "Nicht genügend Überstunden",
-        description: `Sie haben nur ${overtimeStats.availableOvertimeDays} verfügbare Überstunden-Tage. Sie können nicht ${overtimeForm.requestedDays} Tage beantragen.`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const currentEmployee = allEmployees.find(emp => emp.id === currentUserId);
-    
-    const newRequest: VacationRequest = {
-      id: Math.max(...vacationRequests.map(r => r.id)) + 1,
-      employeeId: currentUserId,
-      employeeName: currentEmployee?.name || "Unknown",
-      startDate: overtimeForm.startDate,
-      endDate: overtimeForm.endDate,
-      days: overtimeForm.requestedDays,
-      reason: `Überstundenausgleich: ${overtimeForm.reason}`,
-      status: "approved", // Overtime requests are auto-approved
-      requestDate: format(new Date(), "yyyy-MM-dd"),
-      isOvertimeRequest: true
-    };
-
-    setVacationRequests(prev => [...prev, newRequest]);
-    setOvertimeForm({ requestedDays: 1, reason: "", startDate: "", endDate: "" });
-    setShowOvertimeDialog(false);
-    
-    toast({
-      title: "Überstundenausgleich genehmigt",
-      description: `${overtimeForm.requestedDays} freie Tag(e) durch Überstundenausgleich wurden automatisch genehmigt.`
-    });
+    if (isAdmin) return true;
+    return request.employee_id === currentEmployeeId && (request.status === 'approved' || request.status === 'pending');
   };
 
   return (
@@ -508,7 +279,7 @@ const Vacation = () => {
           <div>
             <h1 className="text-3xl font-bold">Urlaubsplanung</h1>
             <p className="text-muted-foreground">
-              {userRole === "admin" 
+              {isAdmin 
                 ? "Verwalten Sie Urlaubsanträge und genehmigen Sie Urlaub" 
                 : "Verwalten Sie Ihre Urlaubsanträge und sehen Sie Team-Urlaube"}
             </p>
@@ -521,16 +292,7 @@ const Vacation = () => {
               <Plus className="mr-2 h-4 w-4" />
               Urlaub beantragen
             </Button>
-            {calculateOvertimeStats(currentUserId).availableOvertimeDays > 0 && (
-              <Button 
-                onClick={() => setShowOvertimeDialog(true)}
-                className="bg-orange-600 hover:bg-orange-700"
-              >
-                <Timer className="mr-2 h-4 w-4" />
-                Überstunden einlösen
-              </Button>
-            )}
-            {!canRequestVacation() && userRole === "employee" && (
+            {!canRequestVacation() && !isAdmin && (
               <span className="text-sm text-muted-foreground self-center ml-2">
                 Keine Urlaubstage verfügbar
               </span>
@@ -561,68 +323,82 @@ const Vacation = () => {
             </CardContent>
           </Card>
 
-          {/* Vacation Requests */}
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle>Urlaubsanträge</CardTitle>
-                  <CardDescription>
-                    {userRole === "admin" ? "Alle Urlaubsanträge verwalten" : "Urlaubsanträge des Teams"}
-                  </CardDescription>
-                </div>
-                {userRole === "admin" && (
-                  <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Mitarbeiter auswählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Alle Mitarbeiter</SelectItem>
-                      {allEmployees.map((employee) => (
-                        <SelectItem key={employee.id} value={employee.id.toString()}>
-                          {formatEmployeeName(employee)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
+          {/* Main Content */}
+          <div className="md:col-span-2">
+            <Tabs defaultValue="requests" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="requests">Urlaubsanträge</TabsTrigger>
+                {isAdmin && <TabsTrigger value="entitlements">Ansprüche verwalten</TabsTrigger>}
+              </TabsList>
+              
+              <TabsContent value="requests" className="space-y-4">
+                {/* Vacation Requests Content */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <CardTitle>Urlaubsanträge</CardTitle>
+                        <CardDescription>
+                          {isAdmin ? "Alle Urlaubsanträge verwalten" : "Urlaubsanträge des Teams"}
+                        </CardDescription>
+                      </div>
+                      {isAdmin && (
+                        <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Mitarbeiter auswählen" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Alle Mitarbeiter</SelectItem>
+                            {companyEmployees.map((employee) => (
+                              <SelectItem key={employee.id} value={employee.id}>
+                                {formatEmployeeName(employee)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
               <div className="space-y-4">
-                {getFilteredRequests().length === 0 ? (
+                {vacationLoading ? (
+                  <p className="text-muted-foreground text-center py-8">
+                    Urlaubsanträge werden geladen...
+                  </p>
+                ) : getFilteredRequests().length === 0 ? (
                   <p className="text-muted-foreground text-center py-8">
                     Keine Urlaubsanträge vorhanden
                   </p>
                 ) : (
-                  getFilteredRequests().map((request) => (
-                    <div key={request.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-                      <div className="flex items-center gap-4">
-                        <User className="h-8 w-8 text-muted-foreground p-1 bg-muted rounded-full" />
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold">{formatEmployeeName(allEmployees.find(emp => emp.id === request.employeeId)!)}</p>
-                            {getStatusBadge(request.status)}
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <CalendarIcon className="h-3 w-3" />
-                              {format(new Date(request.startDate), "dd.MM.yyyy", { locale: de })} - {format(new Date(request.endDate), "dd.MM.yyyy", { locale: de })}
+                  getFilteredRequests().map((request) => {
+                    const requestEmployee = request.employee;
+                    return (
+                      <div key={request.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
+                        <div className="flex items-center gap-4">
+                          <User className="h-8 w-8 text-muted-foreground p-1 bg-muted rounded-full" />
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold">{requestEmployee ? formatEmployeeName(requestEmployee) : 'Unknown Employee'}</p>
+                              {getStatusBadge(request.status)}
                             </div>
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {request.days} Tag{request.days !== 1 ? 'e' : ''}
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <CalendarIcon className="h-3 w-3" />
+                                {format(new Date(request.start_date), "dd.MM.yyyy", { locale: de })} - {format(new Date(request.end_date), "dd.MM.yyyy", { locale: de })}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {request.days_requested} Tag{request.days_requested !== 1 ? 'e' : ''}
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                            <FileText className="h-3 w-3" />
-                            {request.reason}
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <FileText className="h-3 w-3" />
+                              {request.reason}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        {userRole === "admin" && request.status === 'pending' && (
-                          <>
+                        <div className="flex gap-2">
+                          {isAdmin && request.status === 'pending' && (
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -633,435 +409,285 @@ const Vacation = () => {
                             >
                               <Settings className="h-4 w-4" />
                             </Button>
-                          </>
-                        )}
-                        {canDeleteRequest(request) && request.employeeId === currentUserId && (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              setSelectedRequest(request);
-                              setShowDeleteDialog(true);
-                            }}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {request.status === 'pending' && request.employeeId === currentUserId && userRole === "employee" && (
-                          <Badge variant="outline">Bearbeitbar</Badge>
-                        )}
+                          )}
+                          {canDeleteRequest(request) && request.employee_id === currentEmployeeId && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                setSelectedRequest(request);
+                                setShowDeleteDialog(true);
+                              }}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {request.status === 'pending' && request.employee_id === currentEmployeeId && !isAdmin && (
+                            <Badge variant="outline">Bearbeitbar</Badge>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </CardContent>
           </Card>
-        </div>
+        </TabsContent>
+        
+        {isAdmin && (
+          <TabsContent value="entitlements">
+            <VacationEntitlementsManager />
+          </TabsContent>
+        )}
+        </Tabs>
+      </div>
+    </div>
 
-        {/* Vacation Statistics */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Urlaubsstatistiken</CardTitle>
-            <CardDescription>
-              Übersicht über Ihre persönlichen Urlaubstage
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-4">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Gesamte Urlaubstage
-                </p>
-                <p className="text-2xl font-bold">{vacationStats.totalDays}</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Verwendete Urlaubstage
-                </p>
-                <p className="text-2xl font-bold">{vacationStats.usedDays}</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Verbleibende Urlaubstage
-                </p>
-                <p className={`text-2xl font-bold ${
-                  vacationStats.remainingDays <= 0 ? 'text-red-600' : 
-                  vacationStats.remainingDays <= 5 ? 'text-yellow-600' : 'text-green-600'
-                }`}>
-                  {vacationStats.remainingDays}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Ausstehende Anträge
-                </p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  {vacationRequests.filter(req => 
-                    req.status === 'pending' && req.employeeId === currentUserId
-                  ).length}
-                </p>
-              </div>
+    {/* Vacation Statistics */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Urlaubsstatistiken</CardTitle>
+          <CardDescription>
+            Übersicht über Ihre persönlichen Urlaubstage
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Gesamte Urlaubstage
+              </p>
+              <p className="text-2xl font-bold">{vacationStats.totalDays}</p>
             </div>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Verwendete Urlaubstage
+              </p>
+              <p className="text-2xl font-bold">{vacationStats.usedDays}</p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Verbleibende Urlaubstage
+              </p>
+              <p className={`text-2xl font-bold ${
+                vacationStats.remainingDays <= 0 ? 'text-red-600' : 
+                vacationStats.remainingDays <= 5 ? 'text-yellow-600' : 'text-green-600'
+              }`}>
+                {vacationStats.remainingDays}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Ausstehende Anträge
+              </p>
+              <p className="text-2xl font-bold text-yellow-600">
+                {vacationRequests.filter(req => 
+                  req.status === 'pending' && req.employee_id === currentEmployeeId
+                ).length}
+              </p>
+            </div>
+          </div>
             
-            {/* Additional stats for all users */}
-            <div className="mt-4 pt-4 border-t">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Beantragte Tage (ausstehend)</p>
-                  <p className="text-2xl font-bold text-blue-600">{vacationStats.pendingDays}</p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Verfügbare Tage für neue Anträge</p>
-                  <p className={`text-2xl font-bold ${
-                    vacationStats.availableDays <= 0 ? 'text-red-600' : 
-                    vacationStats.availableDays <= 3 ? 'text-yellow-600' : 'text-green-600'
-                  }`}>
-                    {vacationStats.availableDays}
-                  </p>
-                </div>
-              </div>
-              {vacationStats.availableDays <= 0 && (
-                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-800">
-                    ⚠️ Sie haben alle verfügbaren Urlaubstage aufgebraucht oder beantragt. 
-                    Neue Anträge sind erst nach Genehmigung oder Stornierung bestehender Anträge möglich.
-                  </p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Overtime Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Überstunden & Zeitausgleich</CardTitle>
-            <CardDescription>
-              Übersicht Ihrer Überstunden aus der Zeiterfassung
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const overtimeStats = calculateOvertimeStats(currentUserId);
-              return (
-                <div className="space-y-6">
-                  {/* Overtime Statistics */}
-                  <div className="grid gap-4 md:grid-cols-4">
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Gesamte Überstunden</p>
-                      <p className="text-2xl font-bold">{overtimeStats.totalOvertimeHours.toFixed(1)}h</p>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Verfügbare freie Tage</p>
-                      <p className={`text-2xl font-bold ${
-                        overtimeStats.availableOvertimeDays > 0 ? 'text-green-600' : 'text-gray-600'
-                      }`}>
-                        {overtimeStats.availableOvertimeDays}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Verwendete Überstunden-Tage</p>
-                      <p className="text-2xl font-bold text-blue-600">{overtimeStats.usedOvertimeDays}</p>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Verbleibende Stunden</p>
-                      <p className="text-2xl font-bold text-orange-600">{overtimeStats.remainingOvertimeHours.toFixed(1)}h</p>
-                    </div>
-                  </div>
-
-                  {/* Request Overtime Compensation */}
-                  {overtimeStats.availableOvertimeDays > 0 && (
-                    <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h4 className="font-medium text-orange-800">Überstundenausgleich verfügbar</h4>
-                          <p className="text-sm text-orange-700">
-                            Sie können {overtimeStats.availableOvertimeDays} freie Tag(e) durch Überstundenausgleich beantragen.
-                            (1 Tag = {getEmployeeWorkHours(currentUserId)} Überstunden)
-                          </p>
-                        </div>
-                        <Button 
-                          onClick={() => setShowOvertimeDialog(true)}
-                          className="bg-orange-600 hover:bg-orange-700"
-                        >
-                          <Timer className="mr-2 h-4 w-4" />
-                          Überstunden einlösen
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Information about overtime calculation */}
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm text-muted-foreground">
-                      ℹ️ Überstunden werden automatisch aus Ihrer Zeiterfassung berechnet. 
-                      Arbeitszeiten über {getEmployeeWorkHours(currentUserId)} Stunden pro Tag werden als Überstunden gezählt.
-                    </p>
-                  </div>
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-
-        {/* Request Vacation Dialog */}
-        <Dialog open={showRequestDialog} onOpenChange={setShowRequestDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Urlaubsantrag stellen</DialogTitle>
-              <DialogDescription>
-                Stellen Sie einen neuen Urlaubsantrag zur Genehmigung
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Startdatum</Label>
-                  <Input 
-                    type="date" 
-                    value={requestForm.startDate}
-                    onChange={(e) => setRequestForm(prev => ({ ...prev, startDate: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Enddatum</Label>
-                  <Input 
-                    type="date" 
-                    value={requestForm.endDate}
-                    onChange={(e) => setRequestForm(prev => ({ ...prev, endDate: e.target.value }))}
-                  />
-                </div>
-              </div>
-              {requestForm.startDate && requestForm.endDate && (
-                <div className="p-3 bg-muted rounded-lg">
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">
-                      Anzahl Urlaubstage: <span className="font-semibold">{calculateDays(requestForm.startDate, requestForm.endDate)}</span>
-                    </p>
-                    {userRole === "employee" && (
-                      <p className="text-sm text-muted-foreground">
-                        Verfügbare Tage: <span className={`font-semibold ${
-                          getMaxRequestableDays() >= calculateDays(requestForm.startDate, requestForm.endDate) 
-                            ? 'text-green-600' 
-                            : 'text-red-600'
-                        }`}>
-                          {getMaxRequestableDays()}
-                        </span>
-                      </p>
-                    )}
-                    {userRole === "employee" && calculateDays(requestForm.startDate, requestForm.endDate) > getMaxRequestableDays() && (
-                      <p className="text-sm text-red-600 font-medium">
-                        ⚠️ Nicht genügend Urlaubstage verfügbar!
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
+          {/* Additional stats for all users */}
+          <div className="mt-4 pt-4 border-t">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Grund</Label>
-                <Textarea 
-                  placeholder="Geben Sie den Grund für Ihren Urlaubsantrag an..."
-                  value={requestForm.reason}
-                  onChange={(e) => setRequestForm(prev => ({ ...prev, reason: e.target.value }))}
+                <p className="text-sm text-muted-foreground">Beantragte Tage (ausstehend)</p>
+                <p className="text-2xl font-bold text-blue-600">{vacationStats.pendingDays}</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Verfügbare Tage für neue Anträge</p>
+                <p className={`text-2xl font-bold ${
+                  vacationStats.availableDays <= 0 ? 'text-red-600' : 
+                  vacationStats.availableDays <= 3 ? 'text-yellow-600' : 'text-green-600'
+                }`}>
+                  {vacationStats.availableDays}
+                </p>
+              </div>
+            </div>
+            {vacationStats.availableDays <= 0 && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">
+                  ⚠️ Sie haben alle verfügbaren Urlaubstage aufgebraucht oder beantragt. 
+                  Neue Anträge sind erst nach Genehmigung oder Stornierung bestehender Anträge möglich.
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Request Vacation Dialog */}
+      <Dialog open={showRequestDialog} onOpenChange={setShowRequestDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Urlaubsantrag stellen</DialogTitle>
+            <DialogDescription>
+              Stellen Sie einen neuen Urlaubsantrag zur Genehmigung
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Startdatum</Label>
+                <Input 
+                  type="date" 
+                  value={requestForm.startDate}
+                  onChange={(e) => setRequestForm(prev => ({ ...prev, startDate: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Enddatum</Label>
+                <Input 
+                  type="date" 
+                  value={requestForm.endDate}
+                  onChange={(e) => setRequestForm(prev => ({ ...prev, endDate: e.target.value }))}
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowRequestDialog(false)}>Abbrechen</Button>
-              <Button 
-                onClick={handleSubmitRequest}
-                disabled={userRole === "employee" && requestForm.startDate && requestForm.endDate && calculateDays(requestForm.startDate, requestForm.endDate) > getMaxRequestableDays()}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Antrag einreichen
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Admin Approval Dialog */}
-        {userRole === "admin" && (
-          <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Urlaubsantrag bearbeiten</DialogTitle>
-                <DialogDescription>
-                  {selectedRequest && (
-                    <>Antrag von {selectedRequest.employeeName} vom {format(new Date(selectedRequest.requestDate), "dd.MM.yyyy", { locale: de })}</>
+            {requestForm.startDate && requestForm.endDate && (
+              <div className="p-3 bg-muted rounded-lg">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">
+                    Anzahl Urlaubstage: <span className="font-semibold">{calculateDays(requestForm.startDate, requestForm.endDate)}</span>
+                  </p>
+                  {!isAdmin && (
+                    <p className="text-sm text-muted-foreground">
+                      Verfügbare Tage: <span className={`font-semibold ${
+                        getMaxRequestableDays() >= calculateDays(requestForm.startDate, requestForm.endDate) 
+                          ? 'text-green-600' 
+                          : 'text-red-600'
+                      }`}>
+                        {getMaxRequestableDays()}
+                      </span>
+                    </p>
                   )}
-                </DialogDescription>
-              </DialogHeader>
-              {selectedRequest && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Zeitraum:</p>
-                    <p className="text-sm text-muted-foreground">
-                      {format(new Date(selectedRequest.startDate), "dd.MM.yyyy", { locale: de })} - {format(new Date(selectedRequest.endDate), "dd.MM.yyyy", { locale: de })} ({selectedRequest.days} Tage)
+                  {!isAdmin && calculateDays(requestForm.startDate, requestForm.endDate) > getMaxRequestableDays() && (
+                    <p className="text-sm text-red-600 font-medium">
+                      ⚠️ Nicht genügend Urlaubstage verfügbar!
                     </p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Grund:</p>
-                    <p className="text-sm text-muted-foreground">{selectedRequest.reason}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Administratornotiz (optional)</Label>
-                    <Textarea placeholder="Notiz zur Genehmigung oder Ablehnung..." />
-                  </div>
-                </div>
-              )}
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>Abbrechen</Button>
-                <Button variant="destructive" onClick={() => handleApprovalAction('rejected')}>
-                  <X className="mr-2 h-4 w-4" />
-                  Ablehnen
-                </Button>
-                <Button onClick={() => handleApprovalAction('approved')}>
-                  <Check className="mr-2 h-4 w-4" />
-                  Genehmigen
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-
-        {/* Overtime Request Dialog */}
-        <Dialog open={showOvertimeDialog} onOpenChange={setShowOvertimeDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Überstundenausgleich beantragen</DialogTitle>
-              <DialogDescription>
-                Tauschen Sie Ihre Überstunden gegen freie Tage (1 Tag = {getEmployeeWorkHours(currentUserId)} Stunden)
-              </DialogDescription>
-            </DialogHeader>
-            {(() => {
-              const overtimeStats = calculateOvertimeStats(currentUserId);
-              return (
-                <div className="space-y-4">
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm text-muted-foreground">
-                      Verfügbare Überstunden-Tage: <span className="font-semibold text-orange-600">{overtimeStats.availableOvertimeDays}</span>
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Verbleibende Stunden: <span className="font-semibold">{overtimeStats.remainingOvertimeHours.toFixed(1)}h</span>
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Startdatum</Label>
-                      <Input 
-                        type="date" 
-                        value={overtimeForm.startDate || ""}
-                        onChange={(e) => setOvertimeForm(prev => ({ ...prev, startDate: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Enddatum</Label>
-                      <Input 
-                        type="date" 
-                        value={overtimeForm.endDate || ""}
-                        onChange={(e) => setOvertimeForm(prev => ({ ...prev, endDate: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                  {overtimeForm.startDate && overtimeForm.endDate && (
-                    <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                      <p className="text-sm text-orange-800">
-                        Gewählter Zeitraum: <span className="font-semibold">
-                          {format(new Date(overtimeForm.startDate), "dd.MM.yyyy", { locale: de })} - 
-                          {format(new Date(overtimeForm.endDate), "dd.MM.yyyy", { locale: de })}
-                        </span>
-                      </p>
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    <Label>Anzahl freie Tage</Label>
-                    <Input 
-                      type="number" 
-                      min="1"
-                      max={overtimeStats.availableOvertimeDays}
-                      value={overtimeForm.requestedDays}
-                      onChange={(e) => setOvertimeForm(prev => ({ ...prev, requestedDays: parseInt(e.target.value) || 1 }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Grund für Zeitausgleich</Label>
-                    <Textarea 
-                      placeholder="z.B. Erholung nach Überstunden, persönliche Termine..."
-                      value={overtimeForm.reason}
-                      onChange={(e) => setOvertimeForm(prev => ({ ...prev, reason: e.target.value }))}
-                    />
-                  </div>
-                  {overtimeForm.requestedDays > overtimeStats.availableOvertimeDays && (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <p className="text-sm text-red-800">
-                        ⚠️ Sie haben nicht genügend Überstunden für {overtimeForm.requestedDays} freie Tage.
-                      </p>
-                    </div>
                   )}
                 </div>
-              );
-            })()}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowOvertimeDialog(false)}>Abbrechen</Button>
-              <Button 
-                onClick={handleOvertimeRequest}
-                disabled={overtimeForm.requestedDays > calculateOvertimeStats(currentUserId).availableOvertimeDays || !overtimeForm.startDate || !overtimeForm.endDate}
-                className="bg-orange-600 hover:bg-orange-700"
-              >
-                <Timer className="mr-2 h-4 w-4" />
-                Überstunden einlösen
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Grund</Label>
+              <Textarea 
+                placeholder="Geben Sie den Grund für Ihren Urlaubsantrag an..."
+                value={requestForm.reason}
+                onChange={(e) => setRequestForm(prev => ({ ...prev, reason: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRequestDialog(false)}>Abbrechen</Button>
+            <Button 
+              onClick={handleSubmitRequest}
+              disabled={!isAdmin && requestForm.startDate && requestForm.endDate && calculateDays(requestForm.startDate, requestForm.endDate) > getMaxRequestableDays()}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Antrag einreichen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        {/* Delete/Revoke Vacation Dialog */}
-        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      {/* Admin Approval Dialog */}
+      {isAdmin && (
+        <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Urlaubsantrag stornieren</DialogTitle>
+              <DialogTitle>Urlaubsantrag bearbeiten</DialogTitle>
               <DialogDescription>
                 {selectedRequest && (
-                  <>Möchten Sie Ihren Urlaubsantrag vom {format(new Date(selectedRequest.requestDate), "dd.MM.yyyy", { locale: de })} wirklich stornieren?</>
+                  <>Antrag vom {format(new Date(selectedRequest.created_at || ''), "dd.MM.yyyy", { locale: de })}</>
                 )}
               </DialogDescription>
             </DialogHeader>
             {selectedRequest && (
               <div className="space-y-4">
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <X className="h-4 w-4 text-red-600" />
-                    <p className="text-sm font-medium text-red-800">Achtung: Diese Aktion kann nicht rückgängig gemacht werden</p>
-                  </div>
-                  <p className="text-sm text-red-700">
-                    {selectedRequest.status === 'approved' 
-                      ? 'Ihr genehmigter Urlaubsantrag wird vollständig entfernt und die Urlaubstage werden wieder zu Ihrem Konto hinzugefügt.' 
-                      : 'Ihr ausstehender Urlaubsantrag wird entfernt.'}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Zeitraum:</p>
+                  <p className="text-sm text-muted-foreground">
+                    {format(new Date(selectedRequest.start_date), "dd.MM.yyyy", { locale: de })} - {format(new Date(selectedRequest.end_date), "dd.MM.yyyy", { locale: de })} ({selectedRequest.days_requested} Tage)
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">Urlaubsdetails:</p>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <p><span className="font-medium">Zeitraum:</span> {format(new Date(selectedRequest.startDate), "dd.MM.yyyy", { locale: de })} - {format(new Date(selectedRequest.endDate), "dd.MM.yyyy", { locale: de })}</p>
-                    <p><span className="font-medium">Tage:</span> {selectedRequest.days} Tag{selectedRequest.days !== 1 ? 'e' : ''}</p>
-                    <p><span className="font-medium">Status:</span> {selectedRequest.status === 'approved' ? 'Genehmigt' : selectedRequest.status === 'pending' ? 'Ausstehend' : 'Abgelehnt'}</p>
-                    <p><span className="font-medium">Grund:</span> {selectedRequest.reason}</p>
-                  </div>
+                  <p className="text-sm font-medium">Grund:</p>
+                  <p className="text-sm text-muted-foreground">{selectedRequest.reason}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Administratornotiz (optional)</Label>
+                  <Textarea 
+                    placeholder="Notiz zur Genehmigung oder Ablehnung..."
+                    value={adminNote}
+                    onChange={(e) => setAdminNote(e.target.value)}
+                  />
                 </div>
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Abbrechen</Button>
-              <Button variant="destructive" onClick={handleDeleteRequest}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                Urlaubsantrag stornieren
+              <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>Abbrechen</Button>
+              <Button variant="destructive" onClick={() => handleApprovalAction('rejected')}>
+                <X className="mr-2 h-4 w-4" />
+                Ablehnen
+              </Button>
+              <Button onClick={() => handleApprovalAction('approved')}>
+                <Check className="mr-2 h-4 w-4" />
+                Genehmigen
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      )}
+
+      {/* Delete/Revoke Vacation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Urlaubsantrag stornieren</DialogTitle>
+            <DialogDescription>
+              {selectedRequest && (
+                <>Möchten Sie Ihren Urlaubsantrag vom {format(new Date(selectedRequest.created_at || ''), "dd.MM.yyyy", { locale: de })} wirklich stornieren?</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRequest && (
+            <div className="space-y-4">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <X className="h-4 w-4 text-red-600" />
+                  <p className="text-sm font-medium text-red-800">Achtung: Diese Aktion kann nicht rückgängig gemacht werden</p>
+                </div>
+                <p className="text-sm text-red-700">
+                  {selectedRequest.status === 'approved' 
+                    ? 'Ihr genehmigter Urlaubsantrag wird vollständig entfernt und die Urlaubstage werden wieder zu Ihrem Konto hinzugefügt.' 
+                    : 'Ihr ausstehender Urlaubsantrag wird entfernt.'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Urlaubsdetails:</p>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p><span className="font-medium">Zeitraum:</span> {format(new Date(selectedRequest.start_date), "dd.MM.yyyy", { locale: de })} - {format(new Date(selectedRequest.end_date), "dd.MM.yyyy", { locale: de })}</p>
+                  <p><span className="font-medium">Tage:</span> {selectedRequest.days_requested} Tag{selectedRequest.days_requested !== 1 ? 'e' : ''}</p>
+                  <p><span className="font-medium">Status:</span> {selectedRequest.status === 'approved' ? 'Genehmigt' : selectedRequest.status === 'pending' ? 'Ausstehend' : 'Abgelehnt'}</p>
+                  <p><span className="font-medium">Grund:</span> {selectedRequest.reason}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Abbrechen</Button>
+            <Button variant="destructive" onClick={handleDeleteRequest}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Urlaubsantrag stornieren
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
     </DashboardLayout>
   );
 };
