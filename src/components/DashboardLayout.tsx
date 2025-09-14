@@ -93,7 +93,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const adminNavigation = [
     { name: "Mitarbeiter", href: "/employees", icon: Users },
     { name: "Gruppen", href: "/groups", icon: Building },
-    { name: "Einstellungen", href: "/settings", icon: Settings },
+    { name: "Einstellungen", href: "/adminSettings", icon: Settings },
   ];
 
   const allNavigation = (isAdmin || isManager)

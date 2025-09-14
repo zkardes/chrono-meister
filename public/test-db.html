@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Database Connection Test</title>
+</head>
+<body>
+    <h1>Database Connection Test</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        import { supabase } from '/src/integrations/supabase/client.ts';
+        
+        const output = document.getElementById('output');
+        
+        async function testConnection() {
+            output.innerHTML += '<p>Testing Supabase connection...</p>';
+            
+            try {
+                // Test basic connection by fetching session
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                
+                if (sessionError) {
+                    output.innerHTML += `<p style="color: red;">Session error: ${JSON.stringify(sessionError)}</p>`;
+                    return;
+                }
+                
+                output.innerHTML += `<p>Session status: ${session ? 'Active' : 'None'}</p>`;
+                
+                if (session?.user) {
+                    output.innerHTML += `<p>User email: ${session.user.email}</p>`;
+                    
+                    // Try to fetch user profile
+                    const { data: profile, error: profileError } = await supabase
+                        .from('user_profiles')
+                        .select('*')
+                        .eq('id', session.user.id)
+                        .single();
+                        
+                    if (profileError) {
+                        output.innerHTML += `<p style="color: red;">Profile fetch error: ${JSON.stringify(profileError)}</p>`;
+                    } else {
+                        output.innerHTML += `<p>User profile: ${JSON.stringify(profile)}</p>`;
+                        
+                        if (profile?.company_id) {
+                            // Try to fetch company info
+                            const { data: company, error: companyError } = await supabase
+                                .from('companies')
+                                .select('*')
+                                .eq('id', profile.company_id)
+                                .single();
+                                
+                            if (companyError) {
+                                output.innerHTML += `<p style="color: red;">Company fetch error: ${JSON.stringify(companyError)}</p>`;
+                            } else {
+                                output.innerHTML += `<p>Company: ${JSON.stringify(company)}</p>`;
+                            }
+                        }
+                    }
+                }
+                
+                output.innerHTML += '<p style="color: green;">Connection test completed successfully</p>';
+            } catch (error) {
+                output.innerHTML += `<p style="color: red;">Connection test failed: ${JSON.stringify(error)}</p>`;
+            }
+        }
+        
+        testConnection();
+    </script>
+</body>
+</html>
