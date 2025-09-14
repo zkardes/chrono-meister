@@ -13,7 +13,6 @@ import Vacation from "./pages/Vacation";
 import Scheduling from "./pages/Scheduling";
 import Employees from "./pages/Employees";
 import Groups from "./pages/Groups";
-import GroupsTest from "./pages/GroupsTest";
 import Settings from "./pages/Settings";
 import Debug from "./pages/Debug";
 import NotFound from "./pages/NotFound";
@@ -65,7 +64,6 @@ const App = () => (
             <Route path="/scheduling" element={<ProtectedRoute><Scheduling /></ProtectedRoute>} />
             <Route path="/employees" element={<ProtectedRoute><Employees /></ProtectedRoute>} />
             <Route path="/groups" element={<ProtectedRoute><Groups /></ProtectedRoute>} />
-            <Route path="/groups-test" element={<ProtectedRoute><GroupsTest /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/adminSettings" element={<ProtectedRoute><AdminSettings /></ProtectedRoute>} />
             <Route path="/debug" element={<Debug />} />
