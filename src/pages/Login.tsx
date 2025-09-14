@@ -5,13 +5,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useAuthActions } from "@/hooks/use-auth";
 import { Clock, Eye, EyeOff, Mail } from "lucide-react";
+import { debugAuth } from "@/lib/debug-auth";
 
 const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signIn, loading: authLoading } = useAuthActions();
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -19,39 +21,58 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    
+    if (!formData.email || !formData.password) {
+      toast({
+        title: "Login Failed",
+        description: "Please fill in all fields.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // Simulate authentication
-    setTimeout(() => {
-      if (formData.email === "admin@demo.de" && formData.password === "admin123") {
-        toast({
-          title: "Willkommen zurück!",
-          description: "Sie wurden erfolgreich angemeldet.",
-        });
-        localStorage.setItem("userRole", "admin");
-        navigate("/dashboard");
-      } else if (formData.email === "user@demo.de" && formData.password === "user123") {
-        toast({
-          title: "Willkommen zurück!",
-          description: "Sie wurden erfolgreich angemeldet.",
-        });
-        localStorage.setItem("userRole", "employee");
-        navigate("/dashboard");
-      } else {
-        toast({
-          title: "Anmeldung fehlgeschlagen",
-          description: "Bitte überprüfen Sie Ihre Zugangsdaten.",
-          variant: "destructive",
-        });
-      }
-      setIsLoading(false);
-    }, 1000);
+    // Debug: Check auth state before login attempt
+    console.log('🔄 Starting login attempt...');
+    await debugAuth.checkSession();
+    await debugAuth.checkStorage();
+
+    const result = await signIn(formData.email, formData.password);
+    
+    if (result.success) {
+      console.log('✅ Login successful');
+      
+      // Debug: Check auth state after successful login
+      setTimeout(async () => {
+        await debugAuth.checkSession();
+        await debugAuth.checkUser();
+      }, 1000);
+      
+      toast({
+        title: "Welcome back!",
+        description: "You have been successfully logged in.",
+      });
+      navigate("/dashboard");
+    } else {
+      console.error('❌ Login failed:', result.error);
+      
+      // Debug: Check auth state after failed login
+      setTimeout(async () => {
+        await debugAuth.checkSession();
+        await debugAuth.testConnection();
+      }, 500);
+      
+      toast({
+        title: "Login Failed",
+        description: result.error?.message || "Please check your credentials.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleGoogleLogin = () => {
     toast({
-      title: "Google-Anmeldung",
-      description: "Diese Funktion wird in Kürze verfügbar sein.",
+      title: "Google Sign-in",
+      description: "This feature will be available soon.",
     });
   };
 
@@ -62,20 +83,20 @@ const Login = () => {
           <div className="flex items-center justify-center mb-4">
             <Clock className="h-10 w-10 text-primary" />
           </div>
-          <CardTitle className="text-2xl text-center">Anmelden</CardTitle>
+          <CardTitle className="text-2xl text-center">Login</CardTitle>
           <CardDescription className="text-center">
-            Melden Sie sich in Ihrem TimeTrack Pro Konto an
+            Sign in to your Chrono Meister account
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">E-Mail-Adresse</Label>
+              <Label htmlFor="email">Email Address</Label>
               <div className="relative">
                 <Input
                   id="email"
                   type="email"
-                  placeholder="name@firma.de"
+                  placeholder="name@domain.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
@@ -85,7 +106,7 @@ const Login = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Passwort</Label>
+              <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -108,14 +129,14 @@ const Login = () => {
             <div className="flex items-center justify-between">
               <label className="flex items-center space-x-2 text-sm">
                 <input type="checkbox" className="rounded border-gray-300" />
-                <span>Angemeldet bleiben</span>
+                <span>Remember me</span>
               </label>
               <Link to="/forgot-password" className="text-sm text-primary hover:underline">
-                Passwort vergessen?
+                Forgot password?
               </Link>
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Anmeldung läuft..." : "Anmelden"}
+            <Button type="submit" className="w-full" disabled={authLoading}>
+              {authLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
 
@@ -124,7 +145,7 @@ const Login = () => {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Oder</span>
+              <span className="bg-background px-2 text-muted-foreground">Or</span>
             </div>
           </div>
 
@@ -152,22 +173,22 @@ const Login = () => {
                 fill="#EA4335"
               />
             </svg>
-            Mit Google anmelden
+            Sign in with Google
           </Button>
 
           <div className="text-sm text-center space-y-2">
-            <p className="text-muted-foreground">Demo-Zugänge:</p>
+            <p className="text-muted-foreground">Demo Access:</p>
             <p className="text-xs">
-              Admin: admin@demo.de / admin123<br/>
-              Mitarbeiter: user@demo.de / user123
+              Create an account or contact your administrator<br/>
+              to get access to the system.
             </p>
           </div>
         </CardContent>
         <CardFooter>
           <p className="text-sm text-center w-full text-muted-foreground">
-            Noch kein Konto?{" "}
+            Don't have an account?{" "}
             <Link to="/register" className="text-primary hover:underline">
-              Jetzt registrieren
+              Sign up now
             </Link>
           </p>
         </CardFooter>

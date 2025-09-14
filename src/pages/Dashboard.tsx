@@ -5,23 +5,280 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Clock, Play, Pause, TrendingUp, Users, Calendar, FileText, AlertTriangle, Timer } from "lucide-react";
+import UserProfile from "@/components/UserProfile";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { useCompanyEmployees } from "@/hooks/use-company-data";
+import { supabase } from "@/integrations/supabase/client";
+import { Tables } from "@/integrations/supabase/types";
+import { Clock, Play, Pause, TrendingUp, Users, Calendar, FileText, AlertTriangle, Timer, Square } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { format, differenceInMinutes, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
+import { de } from "date-fns/locale";
+
+type TimeEntry = Tables<'time_entries'>;
+
+interface ActiveTimeEntry {
+  id: string;
+  start_time: string;
+  description?: string;
+  project?: string;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, employee, company, isAdmin, isManager } = useAuthContext();
+  const { data: companyEmployees = [] } = useCompanyEmployees();
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [isClocked, setIsClocked] = useState(false);
-  const [workTime, setWorkTime] = useState(0);
-  const userRole = localStorage.getItem("userRole");
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [activeEntry, setActiveEntry] = useState<ActiveTimeEntry | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Sample overtime calculation (in hours)
-  const calculateOvertime = () => {
-    const standardWeeklyHours = 40; // Standard work week
-    const currentWeeklyHours = 42.5; // Current week hours
-    const overtime = Math.max(0, currentWeeklyHours - standardWeeklyHours);
-    return overtime;
+  const MINUTES_PER_HOUR = 60;
+  
+  // Get employee's configured work hours from Settings
+  const getEmployeeWorkHours = (): number => {
+    if (!employee?.id) return 8;
+    
+    const workHourSettings = localStorage.getItem("workHourSettings");
+    if (workHourSettings) {
+      const settings = JSON.parse(workHourSettings);
+      const employeeSetting = settings.find((setting: any) => setting.employeeId === employee.id);
+      if (employeeSetting) {
+        return employeeSetting.workHoursPerDay;
+      }
+    }
+    return 8; // Default
+  };
+  
+  const EMPLOYEE_WORK_HOURS = getEmployeeWorkHours();
+  const EMPLOYEE_WORK_MINUTES = EMPLOYEE_WORK_HOURS * MINUTES_PER_HOUR;
+
+  // Fetch time entries from Supabase
+  const fetchTimeEntries = async () => {
+    if (!employee?.id) return;
+    
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('time_entries')
+        .select('*')
+        .eq('employee_id', employee.id)
+        .order('start_time', { ascending: false })
+        .limit(100); // Get recent entries
+        
+      if (error) {
+        console.error('Error fetching time entries:', error);
+        return;
+      }
+      
+      setTimeEntries(data || []);
+    } catch (error) {
+      console.error('Error in fetchTimeEntries:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check for active time entry
+  const checkActiveEntry = async () => {
+    if (!employee?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('time_entries')
+        .select('*')
+        .eq('employee_id', employee.id)
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(1);
+        
+      if (error) {
+        console.error('Error checking active entry:', error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        const entry = data[0];
+        setActiveEntry({
+          id: entry.id,
+          start_time: entry.start_time,
+          description: entry.description || '',
+          project: entry.project || ''
+        });
+      } else {
+        setActiveEntry(null);
+      }
+    } catch (error) {
+      console.error('Error in checkActiveEntry:', error);
+    }
+  };
+
+  // Calculate duration in minutes
+  const calculateDurationInMinutes = (startTime: string, endTime: string | null): number => {
+    if (!endTime) return differenceInMinutes(currentTime, new Date(startTime));
+    return differenceInMinutes(new Date(endTime), new Date(startTime));
+  };
+
+  // Calculate today's total work time
+  const calculateTodaysWorkTime = (): number => {
+    const today = startOfDay(new Date());
+    const tomorrow = endOfDay(new Date());
+    
+    const todaysEntries = timeEntries.filter(entry => {
+      const entryDate = new Date(entry.start_time);
+      return entryDate >= today && entryDate <= tomorrow;
+    });
+    
+    const completedTime = todaysEntries
+      .filter(entry => entry.end_time)
+      .reduce((total, entry) => {
+        return total + calculateDurationInMinutes(entry.start_time, entry.end_time);
+      }, 0);
+    
+    // Add active session time if any
+    const activeTime = activeEntry ? 
+      calculateDurationInMinutes(activeEntry.start_time, null) : 0;
+    
+    return completedTime + activeTime;
+  };
+
+  // Calculate this week's total work time
+  const calculateWeeklyWorkTime = (): number => {
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+    
+    return timeEntries
+      .filter(entry => {
+        const entryDate = new Date(entry.start_time);
+        return entryDate >= weekStart && entryDate <= weekEnd && entry.end_time;
+      })
+      .reduce((total, entry) => {
+        return total + calculateDurationInMinutes(entry.start_time, entry.end_time);
+      }, 0);
+  };
+
+  // Calculate overtime for this week
+  const calculateWeeklyOvertime = (): number => {
+    const weeklyMinutes = calculateWeeklyWorkTime();
+    const expectedWeeklyMinutes = EMPLOYEE_WORK_MINUTES * 5; // 5 work days
+    return Math.max(0, weeklyMinutes - expectedWeeklyMinutes);
+  };
+
+  // Format minutes to time string
+  const formatMinutesToTime = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    const secs = 0; // We don't track seconds in database
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Format minutes to hours display
+  const formatMinutesToHours = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}min`;
+  };
+
+  // Start time tracking
+  const handleStartTime = async () => {
+    if (!employee?.id) {
+      toast({
+        title: "Fehler",
+        description: "Kein Mitarbeiter gefunden.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const now = new Date().toISOString();
+      
+      const { data, error } = await supabase
+        .from('time_entries')
+        .insert({
+          employee_id: employee.id,
+          start_time: now,
+          end_time: null,
+          break_duration: 0,
+          description: '',
+          project: 'Dashboard-Erfassung',
+          is_approved: false
+        })
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('Error starting time entry:', error);
+        toast({
+          title: "Fehler",
+          description: "Zeiterfassung konnte nicht gestartet werden.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setActiveEntry({
+        id: data.id,
+        start_time: data.start_time,
+        description: data.description || '',
+        project: data.project || ''
+      });
+      
+      toast({
+        title: "Eingestempelt",
+        description: "Ihre Zeiterfassung wurde gestartet.",
+      });
+      
+      fetchTimeEntries();
+    } catch (error) {
+      console.error('Error in handleStartTime:', error);
+    }
+  };
+
+  // Stop time tracking
+  const handleStopTime = async () => {
+    if (!activeEntry) return;
+
+    try {
+      const now = new Date().toISOString();
+      
+      const { error } = await supabase
+        .from('time_entries')
+        .update({ end_time: now })
+        .eq('id', activeEntry.id);
+        
+      if (error) {
+        console.error('Error stopping time entry:', error);
+        toast({
+          title: "Fehler",
+          description: "Zeiterfassung konnte nicht gestoppt werden.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const duration = calculateDurationInMinutes(activeEntry.start_time, now);
+      
+      setActiveEntry(null);
+      
+      toast({
+        title: "Ausgestempelt",
+        description: `Arbeitszeit: ${formatMinutesToHours(duration)}`,
+      });
+      
+      fetchTimeEntries();
+    } catch (error) {
+      console.error('Error in handleStopTime:', error);
+    }
+  };
+
+  const handleClockToggle = () => {
+    if (activeEntry) {
+      handleStopTime();
+    } else {
+      handleStartTime();
+    }
   };
 
   // Sample unassigned shifts data
@@ -51,63 +308,48 @@ const Dashboard = () => {
         .map(shift => ({ ...shift, date: day.date }))
     );
 
-  const overtimeHours = calculateOvertime();
+  const overtimeMinutes = calculateWeeklyOvertime();
+  const overtimeHours = Math.floor(overtimeMinutes / 60);
+  const todaysWorkMinutes = calculateTodaysWorkTime();
+
+  // Fetch data when employee changes
+  useEffect(() => {
+    if (employee?.id) {
+      fetchTimeEntries();
+      checkActiveEntry();
+    }
+  }, [employee?.id]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-      if (isClocked) {
-        setWorkTime(prev => prev + 1);
-      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isClocked]);
-
-  const handleClockToggle = () => {
-    if (isClocked) {
-      toast({
-        title: "Ausgestempelt",
-        description: `Arbeitszeit heute: ${formatTime(workTime)}`,
-      });
-    } else {
-      toast({
-        title: "Eingestempelt",
-        description: "Ihre Arbeitszeit wird erfasst.",
-      });
-    }
-    setIsClocked(!isClocked);
-  };
-
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
   const stats = [
     {
       title: "Arbeitszeit heute",
-      value: formatTime(workTime),
+      value: formatMinutesToTime(todaysWorkMinutes),
       icon: Clock,
-      color: "text-primary",
+      color: activeEntry ? "text-green-600" : "text-primary",
     },
     {
-      title: userRole === "admin" ? "Unbesetzte Schichten" : "Überstunden",
-      value: userRole === "admin" ? unassignedShifts.length.toString() : `${overtimeHours}h`,
-      icon: userRole === "admin" ? AlertTriangle : Timer,
-      color: userRole === "admin" ? (unassignedShifts.length > 0 ? "text-warning" : "text-success") : (overtimeHours > 0 ? "text-warning" : "text-success"),
+      title: isAdmin ? "Unbesetzte Schichten" : "Überstunden (Woche)",
+      value: isAdmin ? unassignedShifts.length.toString() : formatMinutesToHours(overtimeMinutes),
+      icon: isAdmin ? AlertTriangle : Timer,
+      color: isAdmin ? (unassignedShifts.length > 0 ? "text-warning" : "text-success") : (overtimeMinutes > 0 ? "text-orange-600" : "text-success"),
     },
     {
       title: "Team Mitglieder",
-      value: userRole === "admin" ? "12" : "4",
+      value: companyEmployees.length.toString(),
       icon: Users,
       color: "text-accent",
     },
     {
       title: "Offene Urlaubsanträge",
-      value: userRole === "admin" ? "3" : "1",
+      value: isAdmin ? "3" : "1",
       icon: Calendar,
       color: "text-warning",
     },
@@ -127,9 +369,11 @@ const Dashboard = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <h1 className="text-3xl font-bold">
+              Dashboard{company ? ` - ${company.name}` : ''}
+            </h1>
             <p className="text-muted-foreground">
-              Willkommen zurück! Heute ist {currentTime.toLocaleDateString('de-DE', { 
+              Welcome back{employee ? `, ${employee.first_name}` : ''}! Today is {currentTime.toLocaleDateString('en-US', { 
                 weekday: 'long', 
                 year: 'numeric', 
                 month: 'long', 
@@ -141,14 +385,29 @@ const Dashboard = () => {
             <p className="text-2xl font-bold">
               {currentTime.toLocaleTimeString('de-DE')}
             </p>
+            {activeEntry && (
+              <p className="text-sm text-green-600 font-medium">
+                Aktiv seit {format(new Date(activeEntry.start_time), 'HH:mm')}
+              </p>
+            )}
             <Button
               size="lg"
-              variant={isClocked ? "destructive" : "success"}
+              variant={activeEntry ? "destructive" : "default"}
               onClick={handleClockToggle}
-              className="mt-2"
+              className={`mt-2 ${activeEntry ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+              disabled={loading}
             >
-              {isClocked ? <Pause className="mr-2" /> : <Play className="mr-2" />}
-              {isClocked ? "Ausstempeln" : "Einstempeln"}
+              {activeEntry ? (
+                <>
+                  <Square className="mr-2" />
+                  Ausstempeln
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2" />
+                  Einstempeln
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -176,11 +435,11 @@ const Dashboard = () => {
             <TabsTrigger value="overview">Übersicht</TabsTrigger>
             <TabsTrigger value="activities">Aktivitäten</TabsTrigger>
             <TabsTrigger value="schedule">Schichtplan</TabsTrigger>
-            {userRole === "admin" && <TabsTrigger value="team">Team</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="team">Team</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <Card>
                 <CardHeader>
                   <CardTitle>Wochenübersicht</CardTitle>
@@ -189,22 +448,66 @@ const Dashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-                    <TrendingUp className="h-8 w-8 mr-2" />
-                    <span>Chart-Visualisierung folgt</span>
-                  </div>
+                  {loading ? (
+                    <div className="h-[200px] flex items-center justify-center">
+                      <Clock className="h-6 w-6 animate-spin mr-2" />
+                      <span>Lade Daten...</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4 text-center">
+                        <div className="p-3 bg-blue-50 rounded-lg">
+                          <p className="text-lg font-bold text-blue-700">
+                            {formatMinutesToHours(calculateWeeklyWorkTime())}
+                          </p>
+                          <p className="text-xs text-blue-600">Diese Woche</p>
+                        </div>
+                        <div className="p-3 bg-green-50 rounded-lg">
+                          <p className="text-lg font-bold text-green-700">
+                            {formatMinutesToHours(todaysWorkMinutes)}
+                          </p>
+                          <p className="text-xs text-green-600">Heute</p>
+                        </div>
+                      </div>
+                      
+                      {timeEntries.length > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Letzte Einträge:</p>
+                          {timeEntries.slice(0, 3).map((entry) => (
+                            <div key={entry.id} className="flex justify-between text-xs p-2 bg-gray-50 rounded">
+                              <span>
+                                {format(new Date(entry.start_time), 'dd.MM HH:mm', { locale: de })}
+                                {!entry.end_time && ' (aktiv)'}
+                              </span>
+                              <span className={!entry.end_time ? 'text-green-600 font-medium' : ''}>
+                                {entry.end_time ? 
+                                  formatMinutesToHours(calculateDurationInMinutes(entry.start_time, entry.end_time)) :
+                                  formatMinutesToHours(calculateDurationInMinutes(entry.start_time, null)) + ' (laufend)'
+                                }
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <TrendingUp className="h-8 w-8 mx-auto mb-2" />
+                          <p className="text-sm">Noch keine Zeiteinträge vorhanden</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>{userRole === "admin" ? "Unbesetzte Schichten" : "Überstunden-Tracking"}</CardTitle>
+                  <CardTitle>{isAdmin ? "Unbesetzte Schichten" : "Überstunden-Tracking"}</CardTitle>
                   <CardDescription>
-                    {userRole === "admin" ? "Schichten, die noch Personal benötigen" : "Ihre Überstunden für diese Woche"}
+                    {isAdmin ? "Schichten, die noch Personal benötigen" : "Ihre Überstunden für diese Woche"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {userRole === "admin" ? (
+                  {isAdmin ? (
                     <div className="space-y-3">
                       {unassignedShifts.length === 0 ? (
                         <div className="text-center py-4">
@@ -245,38 +548,80 @@ const Dashboard = () => {
                   ) : (
                     <div className="space-y-4">
                       <div className="text-center p-4 bg-slate-50 rounded-lg">
-                        <Timer className={`h-8 w-8 mx-auto mb-2 ${overtimeHours > 0 ? 'text-warning' : 'text-success'}`} />
-                        <p className="text-2xl font-bold">{overtimeHours}h</p>
+                        <Timer className={`h-8 w-8 mx-auto mb-2 ${overtimeMinutes > 0 ? 'text-orange-600' : 'text-success'}`} />
+                        <p className="text-2xl font-bold">{formatMinutesToHours(overtimeMinutes)}</p>
                         <p className="text-sm text-muted-foreground">Überstunden diese Woche</p>
+                        {activeEntry && (
+                          <div className="mt-2 p-2 bg-green-100 rounded">
+                            <p className="text-xs text-green-700">
+                              ⏱️ Aktive Sitzung: {formatMinutesToHours(calculateDurationInMinutes(activeEntry.start_time, null))}
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Sollstunden:</span>
-                          <span>40h</span>
+                          <span className="text-muted-foreground">Sollstunden (Woche):</span>
+                          <span>{EMPLOYEE_WORK_HOURS * 5}h</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Ist-Stunden:</span>
-                          <span>42.5h</span>
+                          <span className="text-muted-foreground">Ist-Stunden (Woche):</span>
+                          <span>{formatMinutesToHours(calculateWeeklyWorkTime())}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Heute gearbeitet:</span>
+                          <span className={activeEntry ? 'text-green-600 font-medium' : ''}>
+                            {formatMinutesToHours(todaysWorkMinutes)}
+                            {activeEntry && ' (laufend)'}
+                          </span>
                         </div>
                         <div className="flex justify-between text-sm font-medium">
                           <span className="text-muted-foreground">Überstunden:</span>
-                          <span className={overtimeHours > 0 ? 'text-warning' : 'text-success'}>
-                            {overtimeHours > 0 ? '+' : ''}{overtimeHours}h
+                          <span className={overtimeMinutes > 0 ? 'text-orange-600' : 'text-success'}>
+                            {overtimeMinutes > 0 ? '+' : ''}{formatMinutesToHours(overtimeMinutes)}
                           </span>
                         </div>
                       </div>
-                      {overtimeHours > 0 && (
+                      {overtimeMinutes > 0 && (
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                           <p className="text-sm text-yellow-800">
-                            💡 Tipp: Sprechen Sie mit Ihrem Manager über Freizeitausgleich
+                            💡 Tipp: {Math.floor(overtimeMinutes / EMPLOYEE_WORK_MINUTES)} Tag(e) Freizeitausgleich verfügbar
                           </p>
                         </div>
                       )}
+                      {activeEntry && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-green-800">Zeiterfassung aktiv</p>
+                              <p className="text-xs text-green-700">
+                                Gestartet: {format(new Date(activeEntry.start_time), 'dd.MM HH:mm', { locale: de })}
+                              </p>
+                              <p className="text-xs text-green-600">
+                                Projekt: {activeEntry.project || 'Nicht angegeben'}
+                              </p>
+                            </div>
+                            <Timer className="h-6 w-6 text-green-600 animate-pulse" />
+                          </div>
+                        </div>
+                      )}
+                      <Button 
+                        variant="outline" 
+                        className="w-full" 
+                        onClick={() => navigate('/time-tracking')}
+                      >
+                        <Clock className="mr-2 h-4 w-4" />
+                        Zur Zeiterfassung
+                      </Button>
                     </div>
                   )}
                 </CardContent>
               </Card>
 
+              {/* User Profile Component */}
+              <div className="lg:row-span-2">
+                <UserProfile />
+              </div>
              
             </div>
           </TabsContent>
@@ -363,7 +708,7 @@ const Dashboard = () => {
             </Card>
           </TabsContent>
 
-          {userRole === "admin" && (
+          {isAdmin && (
             <TabsContent value="team">
               <Card>
                 <CardHeader>

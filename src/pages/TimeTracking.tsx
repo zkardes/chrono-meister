@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,338 +6,548 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, Play, Pause, Coffee, Plus, Download, Timer } from "lucide-react";
+import { Clock, Play, Pause, Coffee, Plus, Download, Timer, Square } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, differenceInMinutes } from "date-fns";
+import { executeWithRetry, handleDatabaseError } from '@/lib/database-retry';
+import { format, parseISO, differenceInMinutes, startOfDay, endOfDay } from "date-fns";
 import { de } from "date-fns/locale";
+import { useAuthContext } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { Tables } from "@/integrations/supabase/types";
 
-interface TimeEntry {
-  id: number;
-  date: string;
-  start: string;
-  end: string;
-  duration: string;
+type TimeEntry = Tables<'time_entries'>;
+
+interface ActiveTimeEntry {
+  id: string;
+  start_time: string;
   description?: string;
+  project?: string;
 }
 
 const TimeTracking = () => {
   const { toast } = useToast();
+  const { employee, user, loading: authLoading } = useAuthContext();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeEntry, setActiveEntry] = useState<ActiveTimeEntry | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
   
-  // Get user info
-  const currentUserId = parseInt(localStorage.getItem("currentUserId") || "1");
+  // Manual entry form state
+  const [manualEntry, setManualEntry] = useState({
+    date: format(new Date(), 'yyyy-MM-dd'),
+    startTime: '',
+    endTime: '',
+    description: '',
+    project: ''
+  });
   
   const MINUTES_PER_HOUR = 60;
   
-  // Get employee's configured work hours from Settings
-  const getEmployeeWorkHours = (employeeId: number): number => {
+  // Get employee's configured work hours from Settings (fallback to 8 hours)
+  const getEmployeeWorkHours = (): number => {
+    if (!employee?.id) return 8;
+    
     const workHourSettings = localStorage.getItem("workHourSettings");
     if (workHourSettings) {
       const settings = JSON.parse(workHourSettings);
-      const employeeSetting = settings.find((setting: any) => setting.employeeId === employeeId);
+      const employeeSetting = settings.find((setting: any) => setting.employeeId === employee.id);
       if (employeeSetting) {
         return employeeSetting.workHoursPerDay;
       }
     }
-    // Default to 8 hours if no setting found
-    return 8;
+    return 8; // Default to 8 hours if no setting found
   };
   
-  const EMPLOYEE_WORK_HOURS = getEmployeeWorkHours(currentUserId);
+  const EMPLOYEE_WORK_HOURS = getEmployeeWorkHours();
   const EMPLOYEE_WORK_MINUTES = EMPLOYEE_WORK_HOURS * MINUTES_PER_HOUR;
 
-  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([
-    { id: 1, date: "2024-01-15", start: "09:00", end: "12:30", duration: "3h 30min", description: "Vormittagsarbeit" },
-    { id: 2, date: "2024-01-15", start: "13:30", end: "19:45", duration: "6h 15min", description: "Nachmittagsarbeit mit Überstunden" },
-    { id: 3, date: "2024-01-14", start: "08:30", end: "12:00", duration: "3h 30min", description: "Vormittagsschicht" },
-    { id: 4, date: "2024-01-14", start: "13:00", end: "19:30", duration: "6h 30min", description: "Nachmittagsschicht mit Überstunden" },
-    { id: 5, date: "2024-01-16", start: "08:00", end: "20:00", duration: "12h 00min", description: "Langer Arbeitstag mit 4h Überstunden" },
-    { id: 6, date: "2024-01-17", start: "09:00", end: "19:00", duration: "10h 00min", description: "Weiterer Tag mit 2h Überstunden" },
-  ]);
-
-  // Calculate duration in minutes between start and end time
-  const calculateDurationInMinutes = (start: string, end: string): number => {
-    const startTime = new Date(`2024-01-01T${start}:00`);
-    const endTime = new Date(`2024-01-01T${end}:00`);
-    return differenceInMinutes(endTime, startTime);
-  };
-
-  // Calculate daily worked minutes for a specific date
-  const calculateDailyWorkedMinutes = (date: string): number => {
-    return timeEntries
-      .filter(entry => entry.date === date)
-      .reduce((total, entry) => {
-        return total + calculateDurationInMinutes(entry.start, entry.end);
-      }, 0);
-  };
-
-  // Calculate overtime for a specific date
-  const calculateDailyOvertime = (date: string): number => {
-    const workedMinutes = calculateDailyWorkedMinutes(date);
-    const overtimeMinutes = Math.max(0, workedMinutes - EMPLOYEE_WORK_MINUTES);
-    return overtimeMinutes;
-  };
-
-  // Get all unique dates from time entries
-  const getUniqueDates = (): string[] => {
-    return Array.from(new Set(timeEntries.map(entry => entry.date))).sort();
-  };
-
-  // Calculate total overtime across all days
-  const calculateTotalOvertime = (): { hours: number; minutes: number } => {
-    const uniqueDates = getUniqueDates();
-    const totalOvertimeMinutes = uniqueDates.reduce((total, date) => {
-      return total + calculateDailyOvertime(date);
-    }, 0);
+  // Update current time every second for active timer display
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
     
-    const hours = Math.floor(totalOvertimeMinutes / MINUTES_PER_HOUR);
-    const minutes = totalOvertimeMinutes % MINUTES_PER_HOUR;
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch time entries when component mounts or employee changes
+  useEffect(() => {
+    if (employee?.id) {
+      fetchTimeEntries();
+      checkActiveEntry();
+    }
+  }, [employee?.id]);
+
+  // Fetch time entries from Supabase with retry mechanism
+  const fetchTimeEntries = async () => {
+    if (!employee?.id) return;
     
-    return { hours, minutes };
+    try {
+      setLoading(true);
+      
+      const { data, error } = await executeWithRetry(
+        async () => await supabase
+          .from('time_entries')
+          .select('*')
+          .eq('employee_id', employee.id)
+          .order('start_time', { ascending: false })
+          .limit(50),
+        'fetch time entries'
+      );
+        
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'fetch time entries');
+        toast({
+          title: "Fehler",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setTimeEntries((data as TimeEntry[]) || []);
+    } catch (error) {
+      console.error('Error in fetchTimeEntries:', error);
+      toast({
+        title: "Fehler",
+        description: "Ein unerwarteter Fehler ist aufgetreten.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Calculate available overtime days (employee's work hours = 1 day)
-  const calculateOvertimeDays = (): number => {
-    const { hours } = calculateTotalOvertime();
-    return Math.floor(hours / EMPLOYEE_WORK_HOURS);
+  // Check for active (uncompleted) time entry with retry mechanism
+  const checkActiveEntry = async () => {
+    if (!employee?.id) return;
+    
+    try {
+      const { data, error } = await executeWithRetry(
+        async () => await supabase
+          .from('time_entries')
+          .select('*')
+          .eq('employee_id', employee.id)
+          .is('end_time', null)
+          .order('start_time', { ascending: false })
+          .limit(1),
+        'check active entry'
+      );
+        
+      if (error) {
+        console.error('Error checking active entry:', handleDatabaseError(error, 'check active entry'));
+        return;
+      }
+      
+      const timeEntryData = data as TimeEntry[];
+      if (timeEntryData && timeEntryData.length > 0) {
+        const entry = timeEntryData[0];
+        setActiveEntry({
+          id: entry.id,
+          start_time: entry.start_time,
+          description: entry.description || '',
+          project: entry.project || ''
+        });
+      } else {
+        setActiveEntry(null);
+      }
+    } catch (error) {
+      console.error('Error in checkActiveEntry:', error);
+    }
   };
 
-  // Format minutes to hours and minutes display
+  // Start time tracking with retry mechanism
+  const handleStartTime = async () => {
+    if (!employee?.id) {
+      toast({
+        title: "Fehler",
+        description: "Kein Mitarbeiter gefunden. Bitte melden Sie sich erneut an.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const now = new Date().toISOString();
+      
+      const { data, error } = await executeWithRetry(
+        async () => await supabase
+          .from('time_entries')
+          .insert({
+            employee_id: employee.id,
+            start_time: now,
+            end_time: null,
+            break_duration: 0,
+            description: '',
+            project: 'Allgemeine Arbeit',
+            is_approved: false
+          })
+          .select()
+          .single(),
+        'start time entry'
+      );
+        
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'start time entry');
+        toast({
+          title: "Fehler",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const timeEntryData = data as TimeEntry;
+      setActiveEntry({
+        id: timeEntryData.id,
+        start_time: timeEntryData.start_time,
+        description: timeEntryData.description || '',
+        project: timeEntryData.project || ''
+      });
+      
+      toast({
+        title: "Zeit gestartet",
+        description: "Ihre Zeiterfassung wurde gestartet.",
+      });
+      
+      fetchTimeEntries();
+    } catch (error) {
+      console.error('Error in handleStartTime:', error);
+      toast({
+        title: "Fehler",
+        description: "Ein unerwarteter Fehler ist aufgetreten.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Stop time tracking with retry mechanism
+  const handleStopTime = async () => {
+    if (!activeEntry) return;
+
+    try {
+      const now = new Date().toISOString();
+      
+      const { error } = await executeWithRetry(
+        async () => await supabase
+          .from('time_entries')
+          .update({ end_time: now })
+          .eq('id', activeEntry.id),
+        'stop time entry'
+      );
+        
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'stop time entry');
+        toast({
+          title: "Fehler",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const duration = differenceInMinutes(new Date(now), new Date(activeEntry.start_time));
+      setActiveEntry(null);
+      
+      toast({
+        title: "Zeit gestoppt",
+        description: `Arbeitszeit: ${formatMinutesToHours(duration)}`,
+      });
+      
+      fetchTimeEntries();
+    } catch (error) {
+      console.error('Error in handleStopTime:', error);
+      toast({
+        title: "Fehler",
+        description: "Ein unerwarteter Fehler ist aufgetreten.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Start break (pause)
+  const handleStartBreak = async () => {
+    await handleStopTime();
+    toast({
+      title: "Pause gestartet",
+      description: "Ihre Pause wurde gestartet. Drücken Sie 'Zeit starten' um fortzufahren.",
+    });
+  };
+
+  // Create manual time entry with retry mechanism
+  const handleManualEntry = async () => {
+    if (!employee?.id) {
+      toast({
+        title: "Fehler",
+        description: "Kein Mitarbeiter gefunden.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!manualEntry.date || !manualEntry.startTime || !manualEntry.endTime) {
+      toast({
+        title: "Fehler",
+        description: "Bitte füllen Sie alle Pflichtfelder aus.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const startDateTime = new Date(`${manualEntry.date}T${manualEntry.startTime}:00`);
+      const endDateTime = new Date(`${manualEntry.date}T${manualEntry.endTime}:00`);
+
+      if (endDateTime <= startDateTime) {
+        toast({
+          title: "Fehler",
+          description: "Die Endzeit muss nach der Startzeit liegen.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await executeWithRetry(
+        async () => await supabase
+          .from('time_entries')
+          .insert({
+            employee_id: employee.id,
+            start_time: startDateTime.toISOString(),
+            end_time: endDateTime.toISOString(),
+            break_duration: 0,
+            description: manualEntry.description || '',
+            project: manualEntry.project || 'Manueller Eintrag',
+            is_approved: false
+          }),
+        'create manual entry'
+      );
+
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'create manual entry');
+        toast({
+          title: "Fehler",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Zeiteintrag hinzugefügt",
+        description: "Der manuelle Zeiteintrag wurde erfolgreich gespeichert.",
+      });
+
+      setManualEntry({
+        date: format(new Date(), 'yyyy-MM-dd'),
+        startTime: '',
+        endTime: '',
+        description: '',
+        project: ''
+      });
+
+      fetchTimeEntries();
+    } catch (error) {
+      console.error('Error in handleManualEntry:', error);
+      toast({
+        title: "Fehler",
+        description: "Ein unerwarteter Fehler ist aufgetreten.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // ... existing utility functions ...
+  const calculateDurationInMinutes = (startTime: string, endTime: string | null): number => {
+    if (!endTime) return 0;
+    return differenceInMinutes(new Date(endTime), new Date(startTime));
+  };
+
   const formatMinutesToHours = (totalMinutes: number): string => {
     const hours = Math.floor(totalMinutes / MINUTES_PER_HOUR);
     const minutes = totalMinutes % MINUTES_PER_HOUR;
     return `${hours}h ${minutes}min`;
   };
 
-  const totalOvertime = calculateTotalOvertime();
-  const availableOvertimeDays = calculateOvertimeDays();
-
-  const handleManualEntry = () => {
-    toast({
-      title: "Zeiteintrag hinzugefügt",
-      description: "Der manuelle Zeiteintrag wurde erfolgreich gespeichert.",
-    });
+  const formatEntryDuration = (entry: TimeEntry): string => {
+    if (!entry.end_time) {
+      const minutes = differenceInMinutes(currentTime, new Date(entry.start_time));
+      return `${formatMinutesToHours(minutes)} (laufend)`;
+    }
+    const minutes = calculateDurationInMinutes(entry.start_time, entry.end_time);
+    return formatMinutesToHours(minutes);
   };
 
-  const handleExport = () => {
-    toast({
-      title: "Export gestartet",
-      description: "Ihre Zeiterfassungsdaten werden heruntergeladen.",
-    });
-  };
+  // ... rest of component with session status handling ...
+  if (authLoading || !employee) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <Clock className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <p>Lade Zeiterfassungsdaten...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Zeiterfassung</h1>
-            <p className="text-muted-foreground">
-              Verwalten Sie Ihre Arbeitszeiten und Projekte
-            </p>
-          </div>
-          <Button onClick={handleExport}>
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
-        </div>
-
-        <div className="grid gap-8 md:grid-cols-4">
-          {/* Quick Actions */}
-          <Card className="md:col-span-3">
-            <CardHeader>
-              <CardTitle>Schnellaktionen</CardTitle>
-              <CardDescription>
-                Starten Sie die Zeiterfassung
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Button size="lg" variant="success" className="h-48">
+        <h1 className="text-3xl font-bold">Zeiterfassung</h1>
+        
+        {/* Quick Actions */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Schnellaktionen</CardTitle>
+            <CardDescription>
+              {activeEntry ? "Zeiterfassung läuft" : "Starten Sie die Zeiterfassung"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {activeEntry && (
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-green-800">Aktive Zeiterfassung</p>
+                    <p className="text-sm text-green-700">
+                      Gestartet: {format(new Date(activeEntry.start_time), 'dd.MM.yyyy HH:mm', { locale: de })}
+                    </p>
+                    <p className="text-sm text-green-600">
+                      Dauer: {formatMinutesToHours(differenceInMinutes(currentTime, new Date(activeEntry.start_time)))}
+                    </p>
+                  </div>
+                  <Timer className="h-8 w-8 text-green-600 animate-pulse" />
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-2 gap-4">
+              {!activeEntry ? (
+                <Button 
+                  size="lg" 
+                  className="h-48 bg-green-600 hover:bg-green-700"
+                  onClick={handleStartTime}
+                >
                   <Play className="mr-2" />
                   Zeit starten
                 </Button>
-                <Button size="lg" variant="outline" className="h-48">
-                  <Coffee className="mr-2" />
-                  Pause beginnen
+              ) : (
+                <Button 
+                  size="lg" 
+                  variant="destructive" 
+                  className="h-48"
+                  onClick={handleStopTime}
+                >
+                  <Square className="mr-2" />
+                  Zeit stoppen
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
+              )}
+              
+              <Button 
+                size="lg" 
+                variant="outline" 
+                className="h-48"
+                onClick={handleStartBreak}
+                disabled={!activeEntry}
+              >
+                <Coffee className="mr-2" />
+                Pause beginnen
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Calendar */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Kalender</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="w-full max-w-full overflow-hidden">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
+        {/* Manual Entry */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Manueller Eintrag</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="manual-date">Datum</Label>
+                <Input
+                  id="manual-date"
+                  type="date"
+                  value={manualEntry.date}
+                  onChange={(e) => setManualEntry({...manualEntry, date: e.target.value})}
                 />
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <div>
+                <Label htmlFor="manual-project">Projekt</Label>
+                <Input
+                  id="manual-project"
+                  placeholder="Projektname"
+                  value={manualEntry.project}
+                  onChange={(e) => setManualEntry({...manualEntry, project: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="manual-start">Startzeit</Label>
+                <Input
+                  id="manual-start"
+                  type="time"
+                  value={manualEntry.startTime}
+                  onChange={(e) => setManualEntry({...manualEntry, startTime: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="manual-end">Endzeit</Label>
+                <Input
+                  id="manual-end"
+                  type="time"
+                  value={manualEntry.endTime}
+                  onChange={(e) => setManualEntry({...manualEntry, endTime: e.target.value})}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="manual-description">Beschreibung</Label>
+              <Input
+                id="manual-description"
+                placeholder="Arbeitsbeschreibung"
+                value={manualEntry.description}
+                onChange={(e) => setManualEntry({...manualEntry, description: e.target.value})}
+              />
+            </div>
+            <Button onClick={handleManualEntry}>
+              <Plus className="mr-2 h-4 w-4" />
+              Eintrag hinzufügen
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Time Entries */}
-        <Tabs defaultValue="list" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="list">Zeiteinträge</TabsTrigger>
-            <TabsTrigger value="manual">Manueller Eintrag</TabsTrigger>
-            <TabsTrigger value="statistics">Statistiken</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="list">
-            <Card>
-              <CardHeader>
-                <CardTitle>Ihre Zeiteinträge</CardTitle>
-                <CardDescription>
-                  Übersicht aller erfassten Arbeitszeiten
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {timeEntries.map((entry) => {
-                    const dailyOvertime = calculateDailyOvertime(entry.date);
-                    const isOvertimeDay = dailyOvertime > 0;
-                    
-                    return (
-                      <div key={entry.id} className={`flex items-center justify-between p-3 rounded-lg hover:bg-muted border ${
-                        isOvertimeDay ? 'border-orange-200 bg-orange-50/50' : ''
-                      }`}>
-                        <div className="flex items-center gap-4">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <p className="text-sm text-muted-foreground">
-                              {format(parseISO(entry.date), "dd.MM.yyyy", { locale: de })} • {entry.start} - {entry.end}
-                            </p>
-                            {entry.description && (
-                              <p className="text-xs text-muted-foreground">{entry.description}</p>
-                            )}
-                            {isOvertimeDay && (
-                              <p className="text-xs text-orange-600 font-medium">
-                                <Timer className="h-3 w-3 inline mr-1" />
-                                +{formatMinutesToHours(dailyOvertime)} Überstunden
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">{entry.duration}</p>
-                          {isOvertimeDay && (
-                            <p className="text-xs text-orange-600">Überstunden-Tag</p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="manual">
-            <Card>
-              <CardHeader>
-                <CardTitle>Manueller Zeiteintrag</CardTitle>
-                <CardDescription>
-                  Fügen Sie nachträglich Arbeitszeiten hinzu
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Datum</Label>
-                  <Input type="date" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Startzeit</Label>
-                    <Input type="time" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Endzeit</Label>
-                    <Input type="time" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Beschreibung</Label>
-                  <Input placeholder="Optionale Beschreibung der Tätigkeit" />
-                </div>
-                <Button onClick={handleManualEntry}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Eintrag hinzufügen
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="statistics">
-            <Card>
-              <CardHeader>
-                <CardTitle>Statistiken</CardTitle>
-                <CardDescription>
-                  Analyse Ihrer Arbeitszeiten
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-4">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Diese Woche</p>
-                    <p className="text-2xl font-bold">38h 45min</p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Dieser Monat</p>
-                    <p className="text-2xl font-bold">156h 30min</p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Gesamte Überstunden</p>
-                    <p className={`text-2xl font-bold ${
-                      totalOvertime.hours > 0 ? 'text-orange-600' : 'text-gray-600'
-                    }`}>
-                      {totalOvertime.hours}h {totalOvertime.minutes}min
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Verfügbare freie Tage</p>
-                    <p className={`text-2xl font-bold ${
-                      availableOvertimeDays > 0 ? 'text-green-600' : 'text-gray-600'
-                    }`}>
-                      {availableOvertimeDays}
-                    </p>
-                  </div>
-                </div>
-                
-                {/* Overtime Summary */}
-                {totalOvertime.hours > 0 && (
-                  <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium text-orange-800">Überstunden-Zusammenfassung</h4>
-                        <p className="text-sm text-orange-700">
-                          Sie haben {totalOvertime.hours}h {totalOvertime.minutes}min Überstunden angesammelt.
-                        </p>
-                        {availableOvertimeDays > 0 && (
-                          <p className="text-sm text-green-700 font-medium">
-                            ✓ {availableOvertimeDays} freie Tag(e) für Überstundenausgleich verfügbar
-                          </p>
-                        )}
-                        {totalOvertime.hours >= (EMPLOYEE_WORK_HOURS / 2) && totalOvertime.hours < EMPLOYEE_WORK_HOURS && (
-                          <p className="text-sm text-orange-600">
-                            Noch {EMPLOYEE_WORK_HOURS - totalOvertime.hours}h bis zum nächsten freien Tag
-                          </p>
-                        )}
-                      </div>
-                      <Timer className="h-8 w-8 text-orange-600" />
+        <Card>
+          <CardHeader>
+            <CardTitle>Zeiteinträge</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <p>Lade Einträge...</p>
+            ) : timeEntries.length === 0 ? (
+              <p>Keine Zeiteinträge vorhanden.</p>
+            ) : (
+              <div className="space-y-2">
+                {timeEntries.slice(0, 10).map((entry) => (
+                  <div key={entry.id} className="flex justify-between items-center p-3 border rounded">
+                    <div>
+                      <p className="font-medium">
+                        {format(new Date(entry.start_time), 'dd.MM.yyyy HH:mm')} - 
+                        {entry.end_time ? format(new Date(entry.end_time), 'HH:mm') : 'Laufend'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {entry.project} • {formatEntryDuration(entry)}
+                      </p>
                     </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );
