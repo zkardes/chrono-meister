@@ -29,8 +29,8 @@ const Register = () => {
     
     if (!formData.email || !formData.password || !formData.firstName || !formData.lastName || !formData.companyCode) {
       toast({
-        title: "Registration Failed",
-        description: "Please fill in all required fields including Company Code.",
+        title: "Registrierung fehlgeschlagen",
+        description: "Bitte füllen Sie alle Pflichtfelder einschließlich des Firmencodes aus.",
         variant: "destructive",
       });
       return;
@@ -38,8 +38,8 @@ const Register = () => {
 
     if (formData.password !== formData.confirmPassword) {
       toast({
-        title: "Registration Failed",
-        description: "Passwords do not match.",
+        title: "Registrierung fehlgeschlagen",
+        description: "Die Passwörter stimmen nicht überein.",
         variant: "destructive",
       });
       return;
@@ -47,8 +47,8 @@ const Register = () => {
 
     if (formData.password.length < 6) {
       toast({
-        title: "Registration Failed",
-        description: "Password must be at least 6 characters long.",
+        title: "Registrierung fehlgeschlagen",
+        description: "Das Passwort muss mindestens 6 Zeichen lang sein.",
         variant: "destructive",
       });
       return;
@@ -63,14 +63,14 @@ const Register = () => {
     
     if (result.success) {
       toast({
-        title: "Registration Successful!",
-        description: "Please check your email to verify your account.",
+        title: "Registrierung erfolgreich!",
+        description: "Bitte überprüfen Sie Ihre E-Mails, um Ihr Konto zu verifizieren.",
       });
       navigate("/login");
     } else {
       toast({
-        title: "Registration Failed",
-        description: result.error?.message || "An error occurred during registration.",
+        title: "Registrierung fehlgeschlagen",
+        description: result.error?.message || "Ein Fehler ist während der Registrierung aufgetreten.",
         variant: "destructive",
       });
     }
@@ -83,21 +83,21 @@ const Register = () => {
           <div className="flex items-center justify-center mb-4">
             <Clock className="h-10 w-10 text-primary" />
           </div>
-          <CardTitle className="text-2xl text-center">Create Account</CardTitle>
+          <CardTitle className="text-2xl text-center">Konto erstellen</CardTitle>
           <CardDescription className="text-center">
-            Sign up for your Chrono Meister account
+            Registrieren Sie sich für Ihr Chrono Meister Konto
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
+                <Label htmlFor="firstName">Vorname</Label>
                 <div className="relative">
                   <Input
                     id="firstName"
                     type="text"
-                    placeholder="John"
+                    placeholder="Max"
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                     required
@@ -107,11 +107,11 @@ const Register = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
+                <Label htmlFor="lastName">Nachname</Label>
                 <Input
                   id="lastName"
                   type="text"
-                  placeholder="Doe"
+                  placeholder="Mustermann"
                   value={formData.lastName}
                   onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                   required
@@ -120,12 +120,12 @@ const Register = () => {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email">E-Mail-Adresse</Label>
               <div className="relative">
                 <Input
                   id="email"
                   type="email"
-                  placeholder="name@domain.com"
+                  placeholder="name@firma.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
@@ -136,7 +136,7 @@ const Register = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="companyCode">Company Code *</Label>
+              <Label htmlFor="companyCode">Firmencode *</Label>
               <Input
                 id="companyCode"
                 type="text"
@@ -147,12 +147,12 @@ const Register = () => {
                 className="uppercase"
               />
               <p className="text-xs text-muted-foreground">
-                Enter your company code provided by your administrator.
+                Geben Sie den Firmencode ein, den Sie von Ihrem Administrator erhalten haben.
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="employeeId">Employee ID (Optional)</Label>
+              <Label htmlFor="employeeId">Mitarbeiter-ID (Optional)</Label>
               <Input
                 id="employeeId"
                 type="text"
@@ -161,12 +161,12 @@ const Register = () => {
                 onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                If you have an existing employee record, enter your employee ID to link accounts.
+                Falls Sie bereits einen Mitarbeiterdatensatz haben, geben Sie Ihre Mitarbeiter-ID ein, um die Konten zu verknüpfen.
               </p>
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Passwort</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -188,7 +188,7 @@ const Register = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword">Passwort bestätigen</Label>
               <div className="relative">
                 <Input
                   id="confirmPassword"
@@ -210,15 +210,15 @@ const Register = () => {
             </div>
             
             <Button type="submit" className="w-full" disabled={authLoading}>
-              {authLoading ? "Creating Account..." : "Create Account"}
+              {authLoading ? "Konto wird erstellt..." : "Konto erstellen"}
             </Button>
           </form>
         </CardContent>
         <CardFooter>
           <p className="text-sm text-center w-full text-muted-foreground">
-            Already have an account?{" "}
+            Haben Sie bereits ein Konto?{" "}
             <Link to="/login" className="text-primary hover:underline">
-              Sign in
+              Anmelden
             </Link>
           </p>
         </CardFooter>
