@@ -373,7 +373,7 @@ const Dashboard = () => {
               Dashboard{company ? ` - ${company.name}` : ''}
             </h1>
             <p className="text-muted-foreground">
-              Welcome back{employee ? `, ${employee.first_name}` : ''}! Today is {currentTime.toLocaleDateString('en-US', { 
+              Willkommen zurück{employee ? `, ${employee.first_name}` : ''}! Heute ist {currentTime.toLocaleDateString('de-DE', { 
                 weekday: 'long', 
                 year: 'numeric', 
                 month: 'long', 

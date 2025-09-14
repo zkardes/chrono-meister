@@ -46,13 +46,13 @@ const CompanyCodeManager = () => {
     try {
       await navigator.clipboard.writeText(company.company_code || '');
       toast({
-        title: "Copied!",
-        description: "Company code copied to clipboard.",
+        title: "Kopiert!",
+        description: "Firmencode in die Zwischenablage kopiert.",
       });
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to copy company code.",
+        title: "Fehler",
+        description: "Fehler beim Kopieren des Firmencodes.",
         variant: "destructive",
       });
     }
@@ -66,8 +66,8 @@ const CompanyCodeManager = () => {
     // Validate format (alphanumeric, 6-20 characters)
     if (!/^[A-Z0-9]{6,20}$/.test(newCode)) {
       toast({
-        title: "Invalid Code",
-        description: "Company code must be 6-20 characters, letters and numbers only.",
+        title: "Ungültiger Code",
+        description: "Der Firmencode muss 6-20 Zeichen lang sein und nur Buchstaben und Zahlen enthalten.",
         variant: "destructive",
       });
       return;
@@ -85,8 +85,8 @@ const CompanyCodeManager = () => {
 
       if (existingCompany) {
         toast({
-          title: "Code Already Exists",
-          description: "This company code is already in use. Please choose another.",
+          title: "Code bereits vorhanden",
+          description: "Dieser Firmencode wird bereits verwendet. Bitte wählen Sie einen anderen.",
           variant: "destructive",
         });
         return;
@@ -101,8 +101,8 @@ const CompanyCodeManager = () => {
       if (error) throw error;
 
       toast({
-        title: "Code Updated",
-        description: "Company code has been successfully updated.",
+        title: "Code aktualisiert",
+        description: "Der Firmencode wurde erfolgreich aktualisiert.",
       });
 
       // Reload to get updated data
@@ -110,8 +110,8 @@ const CompanyCodeManager = () => {
     } catch (error) {
       console.error('Error updating company code:', error);
       toast({
-        title: "Update Failed",
-        description: "Failed to update company code. Please try again.",
+        title: "Aktualisierung fehlgeschlagen",
+        description: "Fehler beim Aktualisieren des Firmencodes. Bitte versuchen Sie es erneut.",
         variant: "destructive",
       });
     } finally {
@@ -124,16 +124,16 @@ const CompanyCodeManager = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Building className="h-5 w-5" />
-          Company Registration Code
+          Firmen-Registrierungscode
         </CardTitle>
         <CardDescription>
-          Share this code with new employees so they can register and join your company.
+          Teilen Sie diesen Code mit neuen Mitarbeitern, damit sie sich registrieren und Ihrem Unternehmen beitreten können.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Current Code Display */}
         <div className="space-y-2">
-          <Label>Current Company Code</Label>
+          <Label>Aktueller Firmencode</Label>
           <div className="flex items-center gap-2">
             <div className="flex-1 p-3 bg-muted rounded-md font-mono text-lg font-bold">
               {showCode ? company.company_code : '••••••••••'}
@@ -154,16 +154,16 @@ const CompanyCodeManager = () => {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Employees need this code to register and join your company.
+            Mitarbeiter benötigen diesen Code, um sich zu registrieren und Ihrem Unternehmen beizutreten.
           </p>
         </div>
 
         {/* Code Update Section */}
         <div className="pt-4 border-t space-y-3">
-          <Label>Update Company Code</Label>
+          <Label>Firmencode aktualisieren</Label>
           <div className="flex gap-2">
             <Input
-              placeholder="Enter new code"
+              placeholder="Neuen Code eingeben"
               value={newCode}
               onChange={(e) => setNewCode(e.target.value.toUpperCase())}
               className="font-mono uppercase"
@@ -180,14 +180,14 @@ const CompanyCodeManager = () => {
           </div>
           <div className="flex justify-between items-center">
             <p className="text-xs text-muted-foreground">
-              6-20 characters, letters and numbers only
+              6-20 Zeichen, nur Buchstaben und Zahlen
             </p>
             <Button
               size="sm"
               onClick={updateCompanyCode}
               disabled={isUpdating || !newCode.trim() || newCode === company.company_code}
             >
-              {isUpdating ? 'Updating...' : 'Update Code'}
+              {isUpdating ? 'Aktualisierung läuft...' : 'Code aktualisieren'}
             </Button>
           </div>
         </div>
@@ -195,12 +195,12 @@ const CompanyCodeManager = () => {
         {/* Usage Instructions */}
         <div className="pt-4 border-t">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <h4 className="font-medium text-blue-900 mb-2">How to use:</h4>
+            <h4 className="font-medium text-blue-900 mb-2">So funktioniert es:</h4>
             <ol className="text-sm text-blue-800 space-y-1">
-              <li>1. Share the company code with new employees</li>
-              <li>2. They enter it during registration</li>
-              <li>3. They'll automatically join your company</li>
-              <li>4. You can manage them in the employee section</li>
+              <li>1. Teilen Sie den Firmencode mit neuen Mitarbeitern</li>
+              <li>2. Sie geben ihn bei der Registrierung ein</li>
+              <li>3. Sie werden automatisch Ihrem Unternehmen hinzugefügt</li>
+              <li>4. Sie können sie im Mitarbeiterbereich verwalten</li>
             </ol>
           </div>
         </div>

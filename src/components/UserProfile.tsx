@@ -18,14 +18,14 @@ const UserProfile = () => {
     const result = await signOut();
     if (result.success) {
       toast({
-        title: "Signed Out",
-        description: "You have been successfully signed out.",
+        title: "Abgemeldet",
+        description: "Sie wurden erfolgreich abgemeldet.",
       });
       navigate('/login');
     } else {
       toast({
-        title: "Sign Out Failed",
-        description: "An error occurred while signing out.",
+        title: "Abmeldung fehlgeschlagen",
+        description: "Ein Fehler ist beim Abmelden aufgetreten.",
         variant: "destructive",
       });
     }
@@ -40,10 +40,10 @@ const UserProfile = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <User className="h-5 w-5" />
-          User Profile
+          Benutzerprofil
         </CardTitle>
         <CardDescription>
-          Your account and employee information
+          Ihre Konto- und Mitarbeiterinformationen
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -69,7 +69,7 @@ const UserProfile = () => {
             <div className="space-y-2">
               <h4 className="font-medium text-sm flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
-                Company
+                Unternehmen
               </h4>
               
               <div className="space-y-1">
@@ -78,7 +78,7 @@ const UserProfile = () => {
                   <p className="text-xs text-muted-foreground">{company.domain}</p>
                 )}
                 {company.timezone && (
-                  <p className="text-xs text-muted-foreground">Timezone: {company.timezone}</p>
+                  <p className="text-xs text-muted-foreground">Zeitzone: {company.timezone}</p>
                 )}
               </div>
             </div>
@@ -90,7 +90,7 @@ const UserProfile = () => {
           <>
             <hr />
             <div className="space-y-2">
-              <h4 className="font-medium text-sm">Employee Details</h4>
+              <h4 className="font-medium text-sm">Mitarbeiterdetails</h4>
               
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -105,7 +105,7 @@ const UserProfile = () => {
                 
                 {employee.department && (
                   <div>
-                    <span className="text-muted-foreground">Department:</span>
+                    <span className="text-muted-foreground">Abteilung:</span>
                     <p className="flex items-center gap-1">
                       <Building className="h-3 w-3" />
                       {employee.department}
@@ -122,20 +122,20 @@ const UserProfile = () => {
                 
                 {employee.hire_date && (
                   <div>
-                    <span className="text-muted-foreground">Hire Date:</span>
+                    <span className="text-muted-foreground">Einstellungsdatum:</span>
                     <p className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      {new Date(employee.hire_date).toLocaleDateString()}
+                      {new Date(employee.hire_date).toLocaleDateString('de-DE')}
                     </p>
                   </div>
                 )}
                 
                 {employee.hourly_rate && (
                   <div>
-                    <span className="text-muted-foreground">Hourly Rate:</span>
+                    <span className="text-muted-foreground">Stundensatz:</span>
                     <p className="flex items-center gap-1">
                       <DollarSign className="h-3 w-3" />
-                      ${employee.hourly_rate}
+                      €{employee.hourly_rate}
                     </p>
                   </div>
                 )}
@@ -152,7 +152,7 @@ const UserProfile = () => {
           className="w-full"
         >
           <LogOut className="h-4 w-4 mr-2" />
-          Sign Out
+          Abmelden
         </Button>
       </CardContent>
     </Card>

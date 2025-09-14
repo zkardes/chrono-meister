@@ -24,8 +24,8 @@ const Login = () => {
     
     if (!formData.email || !formData.password) {
       toast({
-        title: "Login Failed",
-        description: "Please fill in all fields.",
+        title: "Anmeldung fehlgeschlagen",
+        description: "Bitte füllen Sie alle Felder aus.",
         variant: "destructive",
       });
       return;
@@ -48,8 +48,8 @@ const Login = () => {
       }, 1000);
       
       toast({
-        title: "Welcome back!",
-        description: "You have been successfully logged in.",
+        title: "Willkommen zurück!",
+        description: "Sie wurden erfolgreich angemeldet.",
       });
       navigate("/dashboard");
     } else {
@@ -62,8 +62,8 @@ const Login = () => {
       }, 500);
       
       toast({
-        title: "Login Failed",
-        description: result.error?.message || "Please check your credentials.",
+        title: "Anmeldung fehlgeschlagen",
+        description: result.error?.message || "Bitte überprüfen Sie Ihre Anmeldedaten.",
         variant: "destructive",
       });
     }
@@ -71,8 +71,8 @@ const Login = () => {
 
   const handleGoogleLogin = () => {
     toast({
-      title: "Google Sign-in",
-      description: "This feature will be available soon.",
+      title: "Google-Anmeldung",
+      description: "Diese Funktion ist bald verfügbar.",
     });
   };
 
@@ -83,20 +83,20 @@ const Login = () => {
           <div className="flex items-center justify-center mb-4">
             <Clock className="h-10 w-10 text-primary" />
           </div>
-          <CardTitle className="text-2xl text-center">Login</CardTitle>
+          <CardTitle className="text-2xl text-center">Anmelden</CardTitle>
           <CardDescription className="text-center">
-            Sign in to your Chrono Meister account
+            Melden Sie sich in Ihrem Chrono Meister Konto an
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email">E-Mail-Adresse</Label>
               <div className="relative">
                 <Input
                   id="email"
                   type="email"
-                  placeholder="name@domain.com"
+                  placeholder="name@firma.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
@@ -106,7 +106,7 @@ const Login = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Passwort</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -129,14 +129,14 @@ const Login = () => {
             <div className="flex items-center justify-between">
               <label className="flex items-center space-x-2 text-sm">
                 <input type="checkbox" className="rounded border-gray-300" />
-                <span>Remember me</span>
+                <span>Angemeldet bleiben</span>
               </label>
               <Link to="/forgot-password" className="text-sm text-primary hover:underline">
-                Forgot password?
+                Passwort vergessen?
               </Link>
             </div>
             <Button type="submit" className="w-full" disabled={authLoading}>
-              {authLoading ? "Signing in..." : "Sign In"}
+              {authLoading ? "Anmeldung läuft..." : "Anmelden"}
             </Button>
           </form>
 
@@ -145,7 +145,7 @@ const Login = () => {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or</span>
+              <span className="bg-background px-2 text-muted-foreground">Oder</span>
             </div>
           </div>
 
@@ -173,22 +173,22 @@ const Login = () => {
                 fill="#EA4335"
               />
             </svg>
-            Sign in with Google
+            Mit Google anmelden
           </Button>
 
           <div className="text-sm text-center space-y-2">
-            <p className="text-muted-foreground">Demo Access:</p>
+            <p className="text-muted-foreground">Demo-Zugang:</p>
             <p className="text-xs">
-              Create an account or contact your administrator<br/>
-              to get access to the system.
+              Erstellen Sie ein Konto oder wenden Sie sich an Ihren Administrator<br/>
+              um Zugang zum System zu erhalten.
             </p>
           </div>
         </CardContent>
         <CardFooter>
           <p className="text-sm text-center w-full text-muted-foreground">
-            Don't have an account?{" "}
+            Haben Sie noch kein Konto?{" "}
             <Link to="/register" className="text-primary hover:underline">
-              Sign up now
+              Jetzt registrieren
             </Link>
           </p>
         </CardFooter>

@@ -1,9 +1,47 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Check, Clock, FileText, Users, Calendar, TrendingUp, Shield, Zap } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuthActions } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 const Landing = () => {
+  const navigate = useNavigate();
+  const { signIn } = useAuthActions();
+  const { toast } = useToast();
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
+
+  const handleDemoLogin = async () => {
+    setIsDemoLoading(true);
+    
+    try {
+      const result = await signIn("thomas.weber@democorp.com", "Demo123!");
+      
+      if (result.success) {
+        toast({
+          title: "Demo-Anmeldung erfolgreich!",
+          description: "Sie sind als Thomas Weber angemeldet.",
+        });
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Demo-Anmeldung fehlgeschlagen",
+          description: "Bitte versuchen Sie es erneut oder wenden Sie sich an den Support.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Demo login error:', error);
+      toast({
+        title: "Demo-Anmeldung fehlgeschlagen",
+        description: "Ein unerwarteter Fehler ist aufgetreten.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDemoLoading(false);
+    }
+  };
   const features = [
     {
       icon: Clock,
@@ -153,11 +191,14 @@ const Landing = () => {
                 Jetzt starten
               </Button>
             </Link>
-            <Link to="/login">
-            <Button size="xl" variant="outline">
-              Demo ansehen
+            <Button 
+              size="xl" 
+              variant="outline"
+              onClick={handleDemoLogin}
+              disabled={isDemoLoading}
+            >
+              {isDemoLoading ? "Wird geladen..." : "Demo ansehen"}
             </Button>
-            </Link>
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
             Keine Kreditkarte erforderlich • Keine Kündigungsfrist
