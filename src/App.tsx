@@ -17,6 +17,8 @@ import Settings from "./pages/Settings";
 import Debug from "./pages/Debug";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "@/components/ProtectedRoute";
+// Import the new Profile component
+import Profile from "./pages/Profile";
 
 // Import debug and test utilities for development
 import "@/lib/debug-auth";
@@ -66,6 +68,7 @@ const App = () => (
             <Route path="/groups" element={<ProtectedRoute><Groups /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/adminSettings" element={<ProtectedRoute><AdminSettings /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/debug" element={<Debug />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

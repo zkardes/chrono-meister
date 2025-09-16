@@ -26,7 +26,7 @@ interface ActiveTimeEntry {
 
 const TimeTracking = () => {
   const { toast } = useToast();
-  const { employee, user, loading: authLoading } = useAuthContext();
+  const { employee, company, user, loading: authLoading } = useAuthContext();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,15 +48,15 @@ const TimeTracking = () => {
   const getEmployeeWorkHours = (): number => {
     if (!employee?.id) return 8;
     
-    const workHourSettings = localStorage.getItem("workHourSettings");
-    if (workHourSettings) {
-      const settings = JSON.parse(workHourSettings);
-      const employeeSetting = settings.find((setting: any) => setting.employeeId === employee.id);
-      if (employeeSetting) {
-        return employeeSetting.workHoursPerDay;
+    // Check if company has employee-specific work hours in settings with proper type checking
+    if (company?.settings && typeof company.settings === 'object' && company.settings !== null && 'employee_work_hours' in company.settings) {
+      const employeeWorkHours = company.settings.employee_work_hours;
+      if (typeof employeeWorkHours === 'object' && employeeWorkHours !== null && employee.id in employeeWorkHours) {
+        return employeeWorkHours[employee.id] as number;
       }
     }
-    return 8; // Default to 8 hours if no setting found
+    
+    return 8; // Default
   };
   
   const EMPLOYEE_WORK_HOURS = getEmployeeWorkHours();
@@ -357,7 +357,6 @@ const TimeTracking = () => {
     }
   };
 
-  // ... existing utility functions ...
   const calculateDurationInMinutes = (startTime: string, endTime: string | null): number => {
     if (!endTime) return 0;
     return differenceInMinutes(new Date(endTime), new Date(startTime));
@@ -378,7 +377,6 @@ const TimeTracking = () => {
     return formatMinutesToHours(minutes);
   };
 
-  // ... rest of component with session status handling ...
   if (authLoading || !employee) {
     return (
       <DashboardLayout>
