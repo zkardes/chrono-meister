@@ -178,6 +178,90 @@ export const useAuth = () => {
   return authState;
 };
 
+// Helper function to attempt employee linking during registration
+const attemptEmployeeLinking = async (userId: string, userData: {
+  firstName: string;
+  lastName: string;
+  email: string;
+}) => {
+  try {
+    console.log('🔍 Searching for employee record to link...');
+    
+    // Get the user's company from their profile
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('company_id')
+      .eq('id', userId)
+      .single();
+      
+    if (!profile?.company_id) {
+      console.log('⚠️ No company found for user, skipping employee linking');
+      return;
+    }
+    
+    // Try to find employee by exact match first
+    let { data: employee, error } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('company_id', profile.company_id)
+      .eq('email', userData.email.toLowerCase())
+      .eq('first_name', userData.firstName)
+      .eq('last_name', userData.lastName)
+      .eq('is_active', true)
+      .is('auth_user_id', null) // Not already linked
+      .single();
+
+    // If no exact match, try email only
+    if (!employee && !error) {
+      const { data: emailMatch, error: emailError } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('company_id', profile.company_id)
+        .eq('email', userData.email.toLowerCase())
+        .eq('is_active', true)
+        .is('auth_user_id', null) // Not already linked
+        .single();
+
+      if (!emailError && emailMatch) {
+        employee = emailMatch;
+        console.log('🔗 Found employee by email match (name may differ)');
+      }
+    }
+
+    if (employee) {
+      console.log('✅ Found matching employee, linking accounts...');
+      
+      // Update user profile with employee_id
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ employee_id: employee.id })
+        .eq('id', userId);
+
+      if (profileError) {
+        console.error('❌ Failed to update profile with employee_id:', profileError);
+        return;
+      }
+
+      // Update employee with auth_user_id
+      const { error: employeeError } = await supabase
+        .from('employees')
+        .update({ auth_user_id: userId })
+        .eq('id', employee.id);
+
+      if (employeeError) {
+        console.error('❌ Failed to update employee with auth_user_id:', employeeError);
+        return;
+      }
+      
+      console.log('✨ Employee linking successful!');
+    } else {
+      console.log('📍 No matching employee record found for automatic linking');
+    }
+  } catch (error) {
+    console.error('❌ Error during employee linking:', error);
+  }
+};
+
 export const useAuthActions = () => {
   const [loading, setLoading] = useState(false);
 
@@ -293,6 +377,16 @@ export const useAuthActions = () => {
             hasEmployee: !!profile.employee_id,
             role: profile.role
           });
+          
+          // If no employee was linked by the trigger, try to find and link manually
+          if (!profile.employee_id && userData?.firstName && userData?.lastName) {
+            console.log('🔗 Attempting manual employee linking...');
+            await attemptEmployeeLinking(data.user!.id, {
+              firstName: userData.firstName,
+              lastName: userData.lastName,
+              email: data.user!.email!
+            });
+          }
         }
       }
       

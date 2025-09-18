@@ -9,6 +9,8 @@ type Group = Tables<'groups'>;
 type TimeEntry = Tables<'time_entries'>;
 type VacationRequest = Tables<'vacation_requests'>;
 type Schedule = Tables<'schedules'>;
+type TimeSlot = Tables<'time_slots'>;
+type ScheduleAssignment = Tables<'schedule_assignments'>;
 
 // Hook to get employees from current company
 export const useCompanyEmployees = () => {
@@ -177,6 +179,74 @@ export const useCompanySchedules = (startDate?: string, endDate?: string) => {
       // Filter by company on the client side as an extra security measure
       return (data as (Schedule & { employee: Employee | null })[])
         .filter(schedule => schedule.employee?.company_id === company.id);
+    },
+    enabled: !!company?.id,
+  });
+};
+
+// Hook to get time slots from current company
+export const useCompanyTimeSlots = () => {
+  const { company } = useAuthContext();
+
+  return useQuery({
+    queryKey: ['company-time-slots', company?.id],
+    queryFn: async () => {
+      if (!company?.id) return [];
+
+      const { data, error } = await withRetry(async () =>
+        await supabase
+          .from('time_slots')
+          .select('*')
+          .eq('company_id', company.id)
+          .order('start_time')
+      );
+
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'fetch company time slots');
+        throw new Error(errorMessage);
+      }
+      return data as TimeSlot[];
+    },
+    enabled: !!company?.id,
+  });
+};
+
+// Hook to get schedule assignments from current company
+export const useCompanyScheduleAssignments = (startDate?: string, endDate?: string) => {
+  const { company } = useAuthContext();
+
+  return useQuery({
+    queryKey: ['company-schedule-assignments', company?.id, startDate, endDate],
+    queryFn: async () => {
+      if (!company?.id) return [];
+
+      const { data, error } = await withRetry(async () => {
+        let query = supabase
+          .from('schedule_assignments')
+          .select(`
+            *,
+            employee:employees!schedule_assignments_employee_id_fkey(first_name, last_name, company_id),
+            time_slot:time_slots(name, start_time, end_time)
+          `)
+          .eq('company_id', company.id)
+          .order('scheduled_date');
+
+        if (startDate) {
+          query = query.gte('scheduled_date', startDate);
+        }
+        if (endDate) {
+          query = query.lte('scheduled_date', endDate);
+        }
+
+        return query;
+      });
+
+      if (error) {
+        const errorMessage = handleDatabaseError(error, 'fetch company schedule assignments');
+        throw new Error(errorMessage);
+      }
+
+      return data as ScheduleAssignment[];
     },
     enabled: !!company?.id,
   });
