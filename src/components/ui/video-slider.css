@@ -1,0 +1,180 @@
+.video-slider-container {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  padding: 20px 0;
+}
+
+.video-slider-list {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+
+.video-slider-track {
+  display: flex;
+  width: 100%;
+}
+
+.video-slider-slide {
+  position: relative;
+  flex: 0 0 100%;
+  min-width: 100%;
+  padding: 0 15px;
+}
+
+.video-slide-content {
+  /* Removed background, border-radius, and box-shadow */
+  padding: 30px;
+  text-align: center;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.video-container {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto 20px;
+  /* Removed border-radius and background */
+  overflow: hidden;
+}
+
+.video-element {
+  width: 100%;
+  height: auto;
+  max-height: 500px;
+  object-fit: contain;
+  display: block;
+}
+
+.video-slide-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 15px 0 10px;
+  color: #333;
+}
+
+.video-slide-description {
+  font-size: 1rem;
+  color: #666;
+  line-height: 1.6;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.video-slider-dots {
+  position: relative;
+  display: flex;
+  justify-content: flex-start;
+  padding: 0;
+  margin: 0 0 20px 0;
+  overflow: hidden;
+  width: 100%;
+  height: 50px;
+}
+
+.video-slider-dots-container {
+  display: flex;
+  transition: transform 0.3s ease;
+  position: relative;
+  height: 100%;
+  align-items: center;
+}
+
+.video-slider-dots li {
+  list-style: none;
+  margin: 0 5px;
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+}
+
+.video-slider-dots button {
+  background: transparent;
+  border: none;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.video-slider-active button {
+  transform: scale(1.1);
+}
+
+.video-pagination-icon-button {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-slider-active .video-pagination-icon-button {
+  background: #cecece;
+}
+
+.video-pagination-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-pagination-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Removed navigation arrow styles */
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .video-slide-content {
+    padding: 20px 15px;
+  }
+  
+  .video-container {
+    max-width: 100%;
+  }
+  
+  .video-element {
+    max-height: 300px;
+  }
+  
+  .video-slide-title {
+    font-size: 1.25rem;
+  }
+  
+  .video-slide-description {
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .video-slide-content {
+    padding: 15px 10px;
+  }
+  
+  .video-element {
+    max-height: 200px;
+  }
+  
+  .video-slide-title {
+    font-size: 1.1rem;
+  }
+  
+  .video-slide-description {
+    font-size: 0.8rem;
+  }
+}

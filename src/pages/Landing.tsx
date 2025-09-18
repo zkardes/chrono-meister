@@ -5,6 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuthActions } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { VideoSlider, VideoSliderExample } from '@/components/ui';
+import SliderWeb from "@/components/ui/slider-web";
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -173,7 +175,7 @@ const Landing = () => {
         </div>
       </nav>
 
-      {/* Hero Section */}
+     
       <section className="container mx-auto px-6 py-20">
         <div className="max-w-4xl mx-auto text-center animate-slide-up">
           <h1 className="text-5xl md:text-6xl font-bold mb-6">
@@ -203,6 +205,15 @@ const Landing = () => {
           <p className="mt-4 text-sm text-muted-foreground">
             Keine Kreditkarte erforderlich • Keine Kündigungsfrist
           </p>
+        </div>
+      </section>
+
+       {/* Hero Section */}
+       {/* Slider Section */}
+      <section id ="slider" className="bg-muted/30 py-20">
+        <div className="container mx-auto px-6 py-12">
+          <VideoSliderExample
+/>
         </div>
       </section>
 
