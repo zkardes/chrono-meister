@@ -159,7 +159,7 @@ export const useTimeSlots = (): UseTimeSlotsResult => {
       const { error: deleteError } = await withRetry(async () =>
         await supabase
           .from('time_slots')
-          .update({ is_active: false })
+          .delete()
           .eq('id', id)
       );
 
