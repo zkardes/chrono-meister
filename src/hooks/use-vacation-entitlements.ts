@@ -126,7 +126,7 @@ export const useVacationEntitlements = (): UseVacationEntitlementsResult => {
       const invalidFields = Object.keys(update).filter(key => !allowedFields.includes(key));
       
       if (invalidFields.length > 0) {
-        throw new Error(`Ungültige Felder für Aktualisierung: ${invalidFields.join(', ')}`);
+        throw new Error(`Ungultige Felder fur Aktualisierung: ${invalidFields.join(', ')}`);
       }
       
       // Log the current user context
@@ -159,9 +159,12 @@ export const useVacationEntitlements = (): UseVacationEntitlementsResult => {
         throw new Error(errorMessage);
       }
       
-      // Verify that the entitlement belongs to the current user
-      if (currentEntitlement.employee_id !== employeeData.id) {
-        throw new Error('Sie haben keine Berechtigung, diesen Urlaubsanspruch zu aktualisieren.');
+      // For regular employees, verify that the entitlement belongs to the current user
+      // For admins, allow updating any entitlement
+      if (employeeData && employeeData.position !== 'admin') {
+        if (currentEntitlement.employee_id !== employeeData.id) {
+          throw new Error('Sie haben keine Berechtigung, diesen Urlaubsanspruch zu aktualisieren.');
+        }
       }
 
       // Perform the update directly without retry wrapper for debugging
@@ -279,7 +282,10 @@ export const useVacationEntitlements = (): UseVacationEntitlementsResult => {
 
   // Get specific employee entitlement for a year
   const getEmployeeEntitlement = (employeeId: string, year: number = currentYear): VacationEntitlement | null => {
-    return entitlements.find(ent => ent.employee_id === employeeId && ent.year === year) || null;
+    console.log('Getting employee entitlement:', { employeeId, year, entitlements });
+    const result = entitlements.find(ent => ent.employee_id === employeeId && ent.year === year) || null;
+    console.log('Found entitlement:', result);
+    return result;
   };
 
   // Get total vacation days for an employee (including carried over and bonus days)
@@ -313,7 +319,9 @@ export const useVacationEntitlements = (): UseVacationEntitlementsResult => {
 
   // Refresh entitlements
   const refreshEntitlements = async () => {
+    console.log('Refreshing entitlements...');
     await queryClient.invalidateQueries({ queryKey: ['vacation-entitlements'] });
+    console.log('Entitlements refresh completed');
   };
 
   return {

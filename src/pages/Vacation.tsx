@@ -58,6 +58,7 @@ const Vacation = () => {
     isLoading: true
   });
   const [daysToConvert, setDaysToConvert] = useState(1);
+  const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger state
   
   // Auth context and database hooks
   const { employee, isAdmin, company } = useAuthContext();
@@ -97,7 +98,7 @@ const Vacation = () => {
     return 8; // Default
   };
 
-  // Calculate overtime for the current employee (matching Dashboard calculation)
+  // Calculate overtime for the current employee (matching Dashboard calculation but with conceptual adjustment)
   const calculateOvertime = async () => {
     if (!employee?.id || !company?.created_at) return;
     
@@ -116,7 +117,7 @@ const Vacation = () => {
         console.error('Error fetching time entries:', error);
         toast({
           title: "Fehler",
-          description: "Überstunden konnten nicht berechnet werden.",
+          description: "Überstunden konnen nicht berechnet werden.",
           variant: "destructive"
         });
         return;
@@ -167,15 +168,37 @@ const Vacation = () => {
       const expectedWorkMinutes = expectedWorkDays * dailyWorkMinutes;
       
       // Calculate overtime minutes (can be negative if worked less than expected)
-      const overtimeMinutes = totalWorkedMinutes - expectedWorkMinutes;
+      let overtimeMinutes = totalWorkedMinutes - expectedWorkMinutes;
       
-      // Calculate overtime days (only count positive overtime)
-      const overtimeDays = Math.max(0, Math.floor(overtimeMinutes / dailyWorkMinutes));
+      // Get converted overtime days from entitlement bonus_days field
+      const currentYear = now.getFullYear();
+      const entitlement = getEmployeeEntitlement(employee.id, currentYear);
+      const convertedOvertimeDays = entitlement?.bonus_days && entitlement.bonus_days > 0 
+        ? entitlement.bonus_days 
+        : 0;
+      
+      // Conceptually adjust overtime minutes to reflect converted days
+      // This reduces the actual overtime by the converted amount
+      const convertedMinutes = convertedOvertimeDays * dailyWorkMinutes;
+      overtimeMinutes = overtimeMinutes - convertedMinutes;
+      
+      // Calculate total overtime days (only count positive overtime)
+      const totalOvertimeDays = Math.max(0, Math.floor(overtimeMinutes / dailyWorkMinutes));
+      
+      console.log('Overtime calculation details:', {
+        totalWorkedMinutes,
+        expectedWorkMinutes,
+        rawOvertimeMinutes: totalWorkedMinutes - expectedWorkMinutes,
+        convertedOvertimeDays,
+        convertedMinutes,
+        adjustedOvertimeMinutes: overtimeMinutes,
+        totalOvertimeDays
+      });
       
       setOvertimeStats(prev => ({
-        totalOvertimeMinutes: overtimeMinutes, // Use actual overtime (can be negative)
-        overtimeDays, // Use only positive days for conversion
-        convertedOvertimeDays: prev.convertedOvertimeDays, // Preserve the converted overtime days
+        totalOvertimeMinutes: overtimeMinutes, // Adjusted overtime (can be negative)
+        overtimeDays: totalOvertimeDays, // Show only positive days available for conversion
+        convertedOvertimeDays, // Track converted overtime days from bonus_days
         isLoading: false
       }));
     } catch (error) {
@@ -183,7 +206,7 @@ const Vacation = () => {
       setOvertimeStats(prev => ({ ...prev, isLoading: false }));
       toast({
         title: "Fehler",
-        description: "Überstunden konnten nicht berechnet werden.",
+        description: "Überstunden konnen nicht berechnet werden.",
         variant: "destructive"
       });
     }
@@ -192,6 +215,14 @@ const Vacation = () => {
   // Convert overtime to vacation days
   const handleConvertOvertime = async () => {
     console.log('=== Starting Overtime Conversion ===');
+    console.log('Initial state:', { 
+      employeeId: employee?.id, 
+      overtimeDays: overtimeStats.overtimeDays, 
+      daysToConvert: daysToConvert,
+      convertedOvertimeDays: overtimeStats.convertedOvertimeDays,
+      totalOvertimeMinutes: overtimeStats.totalOvertimeMinutes
+    });
+    
     if (!employee?.id || overtimeStats.overtimeDays <= 0 || daysToConvert <= 0) {
       console.log('Validation failed:', { 
         employeeId: employee?.id, 
@@ -251,7 +282,7 @@ const Vacation = () => {
         newBonusDays 
       });
       
-      // Prepare update data
+      // Prepare update data - update bonus_days and add to notes
       const updateData = {
         bonus_days: newBonusDays,
         notes: entitlement.notes 
@@ -278,25 +309,30 @@ const Vacation = () => {
       
       setShowOvertimeDialog(false);
       
-      // Update the converted overtime days counter
-      setOvertimeStats(prev => ({
-        ...prev,
-        convertedOvertimeDays: prev.convertedOvertimeDays + daysToConvert
-      }));
-      
       // Refresh entitlements and vacation stats
       console.log('Refreshing entitlements...');
       await refreshEntitlements();
       console.log('Entitlements refreshed');
+      
+      // Add a small delay to ensure the refresh completes
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Recalculate overtime stats to reflect the conversion
       console.log('Recalculating overtime...');
       await calculateOvertime();
       console.log('Overtime recalculated');
       
+      // Refresh vacation stats to show updated vacation days
+      console.log('Refreshing vacation stats...');
+      // Trigger a refresh of the vacation stats by invalidating the query
+      refreshRequests();
+      
+      // Trigger a UI refresh
+      setRefreshTrigger(prev => prev + 1);
+      
       toast({
         title: "Erfolg",
-        description: `Erfolgreich ${daysToConvert} Urlaubstag(e) aus Überstunden Ihrem Konto hinzugefügt. Ihre Gesamtüberstunden basieren weiterhin auf Ihren tatsächlichen Arbeitszeiten.`
+        description: `Erfolgreich ${daysToConvert} Urlaubstag(e) aus Überstunden Ihrem Konto hinzugefügt. Ihre verbleibenden Überstunden wurden entsprechend reduziert.`
       });
       console.log('=== Overtime Conversion Completed ===');
     } catch (error: any) {
@@ -321,10 +357,28 @@ const Vacation = () => {
 
   // Load overtime stats when component mounts
   useEffect(() => {
+    console.log('useEffect triggered - employee.id:', employee?.id, 'isAdmin:', isAdmin);
     if (employee?.id && !isAdmin) {
+      console.log('Calculating overtime for employee:', employee.id);
       calculateOvertime();
     }
   }, [employee?.id]);
+
+  // Add another useEffect to recalculate when entitlements change
+  useEffect(() => {
+    console.log('Entitlements changed, recalculating overtime if needed');
+    console.log('Entitlements data:', entitlements);
+    if (employee?.id && !isAdmin && entitlements && entitlements.length > 0) {
+      console.log('Recalculating overtime due to entitlements change');
+      calculateOvertime();
+    }
+  }, [entitlements, employee?.id]);
+
+  // useEffect to trigger refresh when refreshTrigger changes
+  useEffect(() => {
+    // This will cause the component to re-render and recalculate vacation stats
+    console.log('Refresh trigger changed, component will re-render');
+  }, [refreshTrigger]);
 
   // Format employee name according to specification
   const formatEmployeeName = (emp: Employee): string => {
@@ -816,6 +870,11 @@ const Vacation = () => {
                       overtimeStats.overtimeDays <= 0 ? 'text-muted-foreground' : 'text-green-600'
                     }`}>
                       {overtimeStats.isLoading ? 'Lädt...' : overtimeStats.overtimeDays}
+                      {overtimeStats.convertedOvertimeDays > 0 && (
+                        <span className="text-sm block text-muted-foreground">
+                          ({overtimeStats.convertedOvertimeDays} bereits umgerechnet)
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1092,7 +1151,7 @@ const Vacation = () => {
               <p className="text-sm text-yellow-800">
                 ⚠️ Diese Aktion wandelt Ihre Überstunden dauerhaft in zusätzliche Urlaubstage um. 
                 Die umgerechneten Tage werden Ihrem Urlaubskonto als Bonus-Tage hinzugefügt und können wie reguläre Urlaubstage beantragt werden.
-                Ihre Gesamtüberstunden werden weiterhin basierend auf Ihren tatsächlichen Arbeitszeiten berechnet, aber die umgerechneten Tage werden separat verfolgt.
+                Ihre Gesamtüberstunden werden um die umgerechneten Tage reduziert.
               </p>
             </div>
           </div>
