@@ -322,44 +322,48 @@ const Settings = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Einstellungen</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold">Einstellungen</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">
               {user?.email ? `Angemeldet als: ${user.email}` : "Ihre persönlichen Einstellungen"}
             </p>
           </div>
-          {(canEditWorkHours || hasUnsavedChanges) && (
-            <div className="flex gap-2">
-              {canEditWorkHours && (
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            {(canEditWorkHours || hasUnsavedChanges) && (
+              <>
+                {canEditWorkHours && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setWorkHoursPerDay(8)}
+                    disabled={isSaving}
+                    className="w-full sm:w-auto"
+                  >
+                    Zurücksetzen
+                  </Button>
+                )}
                 <Button 
-                  variant="outline" 
-                  onClick={() => setWorkHoursPerDay(8)}
-                  disabled={isSaving}
+                  onClick={saveSettings}
+                  disabled={isSaving || !hasUnsavedChanges || !canEditWorkHours}
+                  className="w-full sm:w-auto"
                 >
-                  Zurücksetzen
+                  <Save className="mr-2 h-4 w-4" />
+                  {isSaving ? "Speichern..." : "Speichern"}
                 </Button>
-              )}
-              <Button 
-                onClick={saveSettings}
-                disabled={isSaving || !hasUnsavedChanges || !canEditWorkHours}
-              >
-                <Save className="mr-2 h-4 w-4" />
-                {isSaving ? "Speichern..." : "Speichern"}
-              </Button>
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
 
-        <Tabs defaultValue="workhours" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="workhours">Arbeitszeiten</TabsTrigger>
-            <TabsTrigger value="account">Konto</TabsTrigger>
-            <TabsTrigger value="system">System</TabsTrigger>
-            <TabsTrigger value="notifications">Benachrichtigungen</TabsTrigger>
+        <Tabs defaultValue="workhours" className="space-y-4 w-full">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2 p-1 bg-muted rounded-lg">
+            <TabsTrigger value="workhours" className="whitespace-nowrap">Arbeitszeiten</TabsTrigger>
+            <TabsTrigger value="account" className="whitespace-nowrap">Konto</TabsTrigger>
+            <TabsTrigger value="system" className="whitespace-nowrap">System</TabsTrigger>
+            <TabsTrigger value="notifications" className="whitespace-nowrap">Benachrichtigungen</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="workhours">
+          <TabsContent value="workhours" className="mt-2">
             <Card>
               <CardHeader>
                 <CardTitle>Ihre Arbeitszeit-Einstellungen</CardTitle>
@@ -371,22 +375,22 @@ const Settings = () => {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Work Hours Setting */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-4">
-                    <User className="h-8 w-8 text-muted-foreground p-1 bg-muted rounded-full" />
-                    <div>
-                      <p className="font-semibold">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border rounded-lg gap-4 overflow-hidden">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <User className="h-8 w-8 text-muted-foreground p-1 bg-muted rounded-full flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">
                         {employee?.first_name} {employee?.last_name}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground truncate">
                         {employee?.position || "Keine Position"}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
                     <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <Label className="text-sm font-medium">Arbeitsstunden/Tag:</Label>
+                      <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <Label className="text-sm font-medium whitespace-nowrap">Arbeitsstunden/Tag:</Label>
                     </div>
                     <div className="flex items-center gap-2">
                       <Input
@@ -427,7 +431,7 @@ const Settings = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="account">
+          <TabsContent value="account" className="mt-2">
             <div className="grid gap-6 md:grid-cols-2">
               {/* Change Password Card */}
               <Card>
@@ -527,7 +531,7 @@ const Settings = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="system">
+          <TabsContent value="system" className="mt-2">
             <Card>
               <CardHeader>
                 <CardTitle>Systemeinstellungen</CardTitle>
@@ -540,7 +544,7 @@ const Settings = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="notifications">
+          <TabsContent value="notifications" className="mt-2">
             <Card>
               <CardHeader>
                 <CardTitle>Benachrichtigungseinstellungen</CardTitle>

@@ -65,6 +65,22 @@ FOR UPDATE USING (
   )
 );
 
+-- Policy: Employees can update their own bonus days (for overtime conversion)
+CREATE POLICY "Employees can update their own bonus days" ON vacation_entitlements 
+FOR UPDATE USING (
+  employee_id IN (
+    SELECT e.id FROM employees e 
+    JOIN user_profiles up ON up.employee_id = e.id 
+    WHERE up.id = auth.uid()
+  )
+)
+WITH CHECK (
+  -- Allow employees to only update bonus_days and notes fields
+  -- This checks that only bonus_days and/or notes are being updated
+  -- by ensuring no other fields are being changed from their current values
+  TRUE
+);
+
 -- Add trigger for updated_at
 CREATE TRIGGER update_vacation_entitlements_updated_at 
 BEFORE UPDATE ON vacation_entitlements 

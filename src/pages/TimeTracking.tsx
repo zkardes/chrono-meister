@@ -635,7 +635,7 @@ const TimeTracking = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Zeiterfassung</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold">Zeiterfassung</h1>
         
         {/* Quick Actions */}
         <Card>
@@ -648,7 +648,7 @@ const TimeTracking = () => {
           <CardContent className="space-y-4">
             {activeEntry && (
               <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <p className="font-medium text-green-800">Aktive Zeiterfassung</p>
                     <p className="text-sm text-green-700">
@@ -663,37 +663,37 @@ const TimeTracking = () => {
               </div>
             )}
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {!activeEntry ? (
                 <Button 
                   size="lg" 
-                  className="h-48 bg-green-600 hover:bg-green-700"
+                  className="h-32 sm:h-48 bg-green-600 hover:bg-green-700"
                   onClick={handleStartTime}
                 >
-                  <Play className="mr-2" />
-                  Zeit starten
+                  <Play className="mr-2 h-6 w-6" />
+                  <span className="text-lg">Zeit starten</span>
                 </Button>
               ) : (
                 <Button 
                   size="lg" 
                   variant="destructive" 
-                  className="h-48"
+                  className="h-32 sm:h-48"
                   onClick={handleStopTime}
                 >
-                  <Square className="mr-2" />
-                  Zeit stoppen
+                  <Square className="mr-2 h-6 w-6" />
+                  <span className="text-lg">Zeit stoppen</span>
                 </Button>
               )}
               
               <Button 
                 size="lg" 
                 variant="outline" 
-                className="h-48"
+                className="h-32 sm:h-48"
                 onClick={handleStartBreak}
                 disabled={!activeEntry}
               >
-                <Coffee className="mr-2" />
-                Pause beginnen
+                <Coffee className="mr-2 h-6 w-6" />
+                <span className="text-lg">Pause beginnen</span>
               </Button>
             </div>
           </CardContent>
@@ -705,7 +705,7 @@ const TimeTracking = () => {
             <CardTitle>Manueller Eintrag</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="manual-date">Datum</Label>
                 <Input
@@ -752,7 +752,7 @@ const TimeTracking = () => {
                 onChange={(e) => setManualEntry({...manualEntry, description: e.target.value})}
               />
             </div>
-            <Button onClick={handleManualEntry}>
+            <Button onClick={handleManualEntry} className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               Eintrag hinzufügen
             </Button>

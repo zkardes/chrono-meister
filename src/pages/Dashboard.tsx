@@ -451,12 +451,12 @@ const Dashboard = () => {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">
+            <h1 className="text-2xl sm:text-3xl font-bold">
               Dashboard{company ? ` - ${company.name}` : ''}
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground text-sm sm:text-base">
               Willkommen zurück{employee ? `, ${employee.first_name}` : ''}! Heute ist {currentTime.toLocaleDateString('de-DE', { 
                 weekday: 'long', 
                 year: 'numeric', 
@@ -465,8 +465,8 @@ const Dashboard = () => {
               })}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold">
+          <div className="text-right w-full sm:w-auto">
+            <p className="text-xl sm:text-2xl font-bold">
               {currentTime.toLocaleTimeString('de-DE')}
             </p>
             {activeEntry && (
@@ -478,18 +478,18 @@ const Dashboard = () => {
               size="lg"
               variant={activeEntry ? "destructive" : "default"}
               onClick={handleClockToggle}
-              className={`mt-2 ${activeEntry ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+              className={`mt-2 w-full sm:w-auto ${activeEntry ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
               disabled={loading}
             >
               {activeEntry ? (
                 <>
-                  <Square className="mr-2" />
-                  Ausstempeln
+                  <Square className="mr-2 h-4 w-4" />
+                  <span className="text-sm sm:text-base">Ausstempeln</span>
                 </>
               ) : (
                 <>
-                  <Play className="mr-2" />
-                  Einstempeln
+                  <Play className="mr-2 h-4 w-4" />
+                  <span className="text-sm sm:text-base">Einstempeln</span>
                 </>
               )}
             </Button>
@@ -497,7 +497,7 @@ const Dashboard = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {getStats().map((stat, index) => (
             <Card key={index} className="card-hover">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -507,19 +507,19 @@ const Dashboard = () => {
                 <stat.icon className={`h-4 w-4 ${stat.color}`} />
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+                <div className={`text-xl sm:text-2xl font-bold ${stat.color}`}>{stat.value}</div>
               </CardContent>
             </Card>
           ))}
         </div>
 
         {/* Main Content */}
-        <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Übersicht</TabsTrigger>
-            <TabsTrigger value="activities">Aktivitäten</TabsTrigger>
-            <TabsTrigger value="schedule">Schichtplan</TabsTrigger>
-            {isAdmin && <TabsTrigger value="team">Team</TabsTrigger>}
+        <Tabs defaultValue="overview" className="space-y-4 w-full">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2 p-1 bg-muted rounded-lg">
+            <TabsTrigger value="overview" className="whitespace-nowrap">Übersicht</TabsTrigger>
+            <TabsTrigger value="activities" className="whitespace-nowrap">Aktivitäten</TabsTrigger>
+            <TabsTrigger value="schedule" className="whitespace-nowrap">Schichtplan</TabsTrigger>
+            {isAdmin && <TabsTrigger value="team" className="whitespace-nowrap">Team</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -716,7 +716,7 @@ const Dashboard = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="activities">
+          <TabsContent value="activities" className="mt-2">
             <Card>
               <CardHeader>
                 <CardTitle>Letzte Aktivitäten</CardTitle>
@@ -760,7 +760,7 @@ const Dashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="schedule">
+          <TabsContent value="schedule" className="mt-2">
             <Card>
               <CardHeader>
                 <CardTitle>Wöchentlicher Schichtplan</CardTitle>
@@ -840,7 +840,7 @@ const Dashboard = () => {
           </TabsContent>
 
           {isAdmin && (
-            <TabsContent value="team">
+            <TabsContent value="team" className="mt-2">
               <Card>
                 <CardHeader>
                   <CardTitle>Team Übersicht</CardTitle>

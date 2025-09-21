@@ -339,23 +339,23 @@ const Scheduling = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Schichtplanung</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold">Schichtplanung</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">
               {canManageSchedules ? "Planen Sie Arbeitsschichten für Ihre Teams" : "Ihre persönlichen Schichtpläne"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             {canManageSchedules && (
-              <Button variant="outline" onClick={() => setShowSlotManager(true)}>
+              <Button variant="outline" onClick={() => setShowSlotManager(true)} className="w-full sm:w-auto">
                 <Settings className="mr-2 h-4 w-4" />
                 Zeitslots verwalten
               </Button>
             )}
             {canManageSchedules && (
               <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue placeholder="Gruppe wählen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -375,7 +375,7 @@ const Scheduling = () => {
 
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
               <div>
                 <CardTitle>Wochenansicht</CardTitle>
                 <CardDescription>
@@ -395,6 +395,7 @@ const Scheduling = () => {
                 <Button
                   variant="outline"
                   onClick={() => setCurrentWeek(new Date())}
+                  className="text-sm"
                 >
                   Heute
                 </Button>

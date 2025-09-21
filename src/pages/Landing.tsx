@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Check, Clock, FileText, Users, Calendar, TrendingUp, Shield, Zap } from "lucide-react";
+import { Check, Clock, FileText, Users, Calendar, TrendingUp, Shield, Zap, Menu, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthActions } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -13,6 +13,7 @@ const Landing = () => {
   const { signIn } = useAuthActions();
   const { toast } = useToast();
   const [isDemoLoading, setIsDemoLoading] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleDemoLogin = async () => {
     setIsDemoLoading(true);
@@ -154,6 +155,7 @@ const Landing = () => {
               <Clock className="h-8 w-8 text-primary" />
               <span className="text-2xl font-bold">TimeTrack Pro</span>
             </div>
+            {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-6">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
                 Funktionen
@@ -171,7 +173,51 @@ const Landing = () => {
                 <Button variant="hero">Registrieren</Button>
               </Link>
             </div>
+            {/* Mobile Menu Button */}
+            <div className="md:hidden">
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+              >
+                {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              </Button>
+            </div>
           </div>
+          {/* Mobile Navigation Menu */}
+          {isMenuOpen && (
+            <div className="md:hidden mt-4 pb-4 space-y-4">
+              <a 
+                href="#features" 
+                className="block text-muted-foreground hover:text-foreground transition-colors py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Funktionen
+              </a>
+              <a 
+                href="#testimonials" 
+                className="block text-muted-foreground hover:text-foreground transition-colors py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Referenzen
+              </a>
+              <a 
+                href="#pricing" 
+                className="block text-muted-foreground hover:text-foreground transition-colors py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Preise
+              </a>
+              <div className="flex gap-2 pt-2">
+                <Link to="/login" className="flex-1">
+                  <Button variant="outline" className="w-full" onClick={() => setIsMenuOpen(false)}>Anmelden</Button>
+                </Link>
+                <Link to="/register" className="flex-1">
+                  <Button variant="hero" className="w-full" onClick={() => setIsMenuOpen(false)}>Registrieren</Button>
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 
