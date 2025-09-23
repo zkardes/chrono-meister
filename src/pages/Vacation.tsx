@@ -20,6 +20,7 @@ import { useAuthContext } from "@/contexts/AuthContext";
 import VacationEntitlementsManager from "@/components/VacationEntitlementsManager";
 import { supabase } from "@/integrations/supabase/client";
 import { useVacationEntitlements } from "@/hooks/use-vacation-entitlements";
+import { generateVacationCalendarCSV, downloadCSV, generateVacationCalendarPDF } from "@/lib/csv-export";
 
 // Using types from the vacation hook instead of local interfaces
 
@@ -59,6 +60,7 @@ const Vacation = () => {
   });
   const [daysToConvert, setDaysToConvert] = useState(1);
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger state
+  const [showExportDialog, setShowExportDialog] = useState(false);
   
   // Auth context and database hooks
   const { employee, isAdmin, company } = useAuthContext();
@@ -589,6 +591,62 @@ const Vacation = () => {
     return request.employee_id === currentEmployeeId && (request.status === 'approved' || request.status === 'pending');
   };
 
+  // Export vacation calendar as CSV
+  const handleExportCalendar = async (format: 'csv' | 'pdf') => {
+    try {
+      // Get current year
+      const currentYear = new Date().getFullYear();
+      
+      // Fetch all vacation requests for the company
+      const { data: allVacationRequests, error: requestsError } = await supabase
+        .from('vacation_requests')
+        .select(`
+          *,
+          employee:employees!vacation_requests_employee_id_fkey(*)
+        `)
+        .eq('status', 'approved');
+        
+      if (requestsError) {
+        toast({
+          title: "Fehler",
+          description: "Urlaubsanträge konnten nicht abgerufen werden.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Filter by company on the client side
+      const companyRequests = (allVacationRequests || []).filter(
+        request => request.employee?.company_id === company?.id
+      );
+      
+      if (format === 'csv') {
+        // Generate CSV data
+        const csvData = generateVacationCalendarCSV(companyRequests, companyEmployees, currentYear);
+        
+        // Download CSV file
+        downloadCSV(csvData, `urlaubsplan-${currentYear}.csv`);
+      } else {
+        // Generate PDF with company name
+        generateVacationCalendarPDF(companyRequests, companyEmployees, currentYear, company?.name);
+      }
+      
+      toast({
+        title: "Export erfolgreich",
+        description: `Der Urlaubsplan für ${currentYear} wurde als ${format.toUpperCase()} exportiert.`
+      });
+      
+      setShowExportDialog(false);
+    } catch (error) {
+      console.error('Error exporting calendar:', error);
+      toast({
+        title: "Fehler",
+        description: "Der Urlaubsplan konnte nicht exportiert werden.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -610,6 +668,16 @@ const Vacation = () => {
               <Plus className="mr-2 h-4 w-4" />
               Urlaub beantragen
             </Button>
+            {isAdmin && (
+              <Button 
+                onClick={() => setShowExportDialog(true)}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+            )}
             {!isAdmin && (
               <Button 
                 onClick={() => setShowOvertimeDialog(true)}
@@ -713,7 +781,7 @@ const Vacation = () => {
                             </div>
                             <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-sm text-muted-foreground">
                               <div className="flex items-center gap-1">
-                                <CalendarIcon className="h-3 w-3" />
+                                <CalendarIcon className="h-33 w-3" />
                                 {format(new Date(request.start_date), "dd.MM.yyyy", { locale: de })} - {format(new Date(request.end_date), "dd.MM.yyyy", { locale: de })}
                               </div>
                               <div className="flex items-center gap-1">
@@ -1163,6 +1231,40 @@ const Vacation = () => {
             >
               <Clock3 className="mr-2 h-4 w-4" />
               Umrechnen und hinzufügen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export-Format auswählen</DialogTitle>
+            <DialogDescription>
+              Wählen Sie das Format für den Export des Urlaubsplans
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <Button 
+              onClick={() => handleExportCalendar('csv')}
+              className="w-full"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              CSV-Datei exportieren
+            </Button>
+            <Button 
+              onClick={() => handleExportCalendar('pdf')}
+              variant="outline"
+              className="w-full"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              PDF-Datei exportieren
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              Abbrechen
             </Button>
           </DialogFooter>
         </DialogContent>
