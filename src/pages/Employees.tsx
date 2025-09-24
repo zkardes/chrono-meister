@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,32 @@ const Employees = () => {
   const { company, isAdmin, isManager } = useAuthContext();
   const { data: employees = [], isLoading, error, refetch } = useCompanyEmployees();
   const { createEmployee, updateEmployee, deactivateEmployee, reactivateEmployee } = useEmployeeManagement();
+  
+  // Check for selected employee from localStorage (from Dashboard)
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  
+  useEffect(() => {
+    // Check if there's a selected employee ID in localStorage
+    const storedEmployeeId = localStorage.getItem('selectedEmployeeId');
+    if (storedEmployeeId) {
+      setSelectedEmployeeId(storedEmployeeId);
+      // Remove it from localStorage so it doesn't persist
+      localStorage.removeItem('selectedEmployeeId');
+      
+      // Scroll to the selected employee after a short delay to ensure DOM is ready
+      setTimeout(() => {
+        const element = document.getElementById(`employee-${storedEmployeeId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Add a temporary highlight effect
+          element.classList.add('bg-yellow-100');
+          setTimeout(() => {
+            element.classList.remove('bg-yellow-100');
+          }, 2000);
+        }
+      }, 100);
+    }
+  }, []);
   
   // Form state for adding new employee
   const [newEmployeeData, setNewEmployeeData] = useState<CreateEmployeeData>({
@@ -296,7 +322,13 @@ const Employees = () => {
                     </div>
                   ) : (
                     employees.map((employee) => (
-                      <div key={employee.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg hover:bg-muted border gap-4 overflow-hidden">
+                      <div 
+                        key={employee.id} 
+                        id={`employee-${employee.id}`}
+                        className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg hover:bg-muted border gap-4 overflow-hidden ${
+                          selectedEmployeeId === employee.id ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''
+                        }`}
+                      >
                         <div className="flex items-center gap-4 min-w-0">
                           <User className="h-8 w-8 text-muted-foreground p-1 bg-muted rounded-full flex-shrink-0" />
                           <div className="space-y-1 min-w-0">

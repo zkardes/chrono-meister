@@ -849,10 +849,110 @@ const Dashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Users className="h-12 w-12 mx-auto mb-4" />
-                    <p>Teamverwaltung wird geladen...</p>
-                  </div>
+                  {companyEmployees.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {companyEmployees.map((teamMember) => (
+                          <Card key={teamMember.id} className="hover:shadow-md transition-shadow">
+                            <CardContent className="p-4">
+                              <div className="flex items-center space-x-4">
+                                <div className="bg-primary/10 rounded-full p-3">
+                                  <Users className="h-6 w-6 text-primary" />
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold">
+                                    {teamMember.first_name} {teamMember.last_name}
+                                  </h3>
+                                  <p className="text-sm text-muted-foreground">
+                                    {teamMember.position || 'Position nicht angegeben'}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {teamMember.department || 'Abteilung nicht angegeben'}
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div className="mt-4 space-y-2">
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-muted-foreground">Rolle:</span>
+                                  <span className="capitalize">
+                                    {teamMember.user_profile?.role === 'admin' ? 'Admin' : 
+                                     teamMember.user_profile?.role === 'manager' ? 'Manager' : 'Mitarbeiter'}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-muted-foreground">Status:</span>
+                                  <span className={teamMember.is_active ? 'text-green-600' : 'text-red-600'}>
+                                    {teamMember.is_active ? 'Aktiv' : 'Inaktiv'}
+                                  </span>
+                                </div>
+                                
+                                {teamMember.email && (
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">E-Mail:</span>
+                                    <span className="text-sm truncate max-w-[120px]">
+                                      {teamMember.email}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="mt-4 flex space-x-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="flex-1"
+                                  onClick={() => {
+                                    // Store the selected employee ID in localStorage
+                                    localStorage.setItem('selectedEmployeeId', teamMember.id);
+                                    navigate('/employees');
+                                  }}
+                                >
+                                  Details
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="flex-1"
+                                  onClick={() => {
+                                    // Pass employee ID as URL parameter
+                                    navigate(`/scheduling?employee=${teamMember.id}`);
+                                  }}
+                                >
+                                  Schichtplan
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                      
+                      <div className="flex justify-between items-center pt-4 border-t">
+                        <p className="text-sm text-muted-foreground">
+                          Insgesamt {companyEmployees.length} Team-Mitglieder
+                        </p>
+                        <Button onClick={() => navigate('/employees')}>
+                          <Users className="mr-2 h-4 w-4" />
+                          Alle Mitarbeiter verwalten
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Users className="h-12 w-12 mx-auto mb-4" />
+                      <p>Keine Teammitglieder gefunden</p>
+                      <p className="text-sm mt-2">
+                        Fügen Sie neue Mitarbeiter über die Mitarbeiterverwaltung hinzu
+                      </p>
+                      <Button 
+                        className="mt-4" 
+                        onClick={() => navigate('/employees')}
+                      >
+                        Mitarbeiter hinzufügen
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
