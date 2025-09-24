@@ -119,7 +119,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
           <div className="flex h-16 items-center justify-between px-4 border-b">
             <div className="flex items-center gap-2">
               <Clock className="h-8 w-8 text-primary" />
-              <span className="text-lg font-bold">TimeTrack Pro</span>
+              <span className="text-lg font-bold">TimeTrack-Pro</span>
             </div>
             <Button
               variant="ghost"

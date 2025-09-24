@@ -1,7 +1,7 @@
 # PowerShell script to set up development environment
 # File: setup-dev-env.ps1
 
-Write-Host "Setting up Chrono Meister Development Environment..." -ForegroundColor Green
+Write-Host "Setting up TimeTrack-Pro Development Environment..." -ForegroundColor Green
 Write-Host ""
 
 # Add Node.js to PATH if not already there

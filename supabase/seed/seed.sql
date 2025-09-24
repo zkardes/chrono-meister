@@ -60,12 +60,12 @@ ON CONFLICT (employee_id, group_id) DO NOTHING;
 
 -- Insert sample time entries (for the current week)
 INSERT INTO time_entries (employee_id, start_time, end_time, break_duration, description, project) VALUES
-  ('11111111-1111-1111-1111-111111111111', '2025-09-08 09:00:00+00', '2025-09-08 17:30:00+00', 30, 'Working on user authentication feature', 'Chrono Meister'),
-  ('11111111-1111-1111-1111-111111111111', '2025-09-09 08:30:00+00', '2025-09-09 17:00:00+00', 45, 'Frontend dashboard development', 'Chrono Meister'),
-  ('22222222-2222-2222-2222-222222222222', '2025-09-08 09:15:00+00', '2025-09-08 18:00:00+00', 60, 'API development and testing', 'Chrono Meister'),
-  ('22222222-2222-2222-2222-222222222222', '2025-09-09 09:00:00+00', '2025-09-09 17:45:00+00', 30, 'Database optimization', 'Chrono Meister'),
-  ('33333333-3333-3333-3333-333333333333', '2025-09-08 10:00:00+00', '2025-09-08 18:30:00+00', 45, 'UI mockups for time tracking', 'Chrono Meister'),
-  ('55555555-5555-5555-5555-555555555555', '2025-09-08 08:45:00+00', '2025-09-08 17:15:00+00', 30, 'Testing authentication flow', 'Chrono Meister')
+  ('11111111-1111-1111-1111-111111111111', '2025-09-08 09:00:00+00', '2025-09-08 17:30:00+00', 30, 'Working on user authentication feature', 'TimeTrack-Pro'),
+  ('11111111-1111-1111-1111-111111111111', '2025-09-09 08:30:00+00', '2025-09-09 17:00:00+00', 45, 'Frontend dashboard development', 'TimeTrack-Pro'),
+  ('22222222-2222-2222-2222-222222222222', '2025-09-08 09:15:00+00', '2025-09-08 18:00:00+00', 60, 'API development and testing', 'TimeTrack-Pro'),
+  ('22222222-2222-2222-2222-222222222222', '2025-09-09 09:00:00+00', '2025-09-09 17:45:00+00', 30, 'Database optimization', 'TimeTrack-Pro'),
+  ('33333333-3333-3333-3333-333333333333', '2025-09-08 10:00:00+00', '2025-09-08 18:30:00+00', 45, 'UI mockups for time tracking', 'TimeTrack-Pro'),
+  ('55555555-5555-5555-5555-555555555555', '2025-09-08 08:45:00+00', '2025-09-08 17:15:00+00', 30, 'Testing authentication flow', 'TimeTrack-Pro')
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert sample vacation requests

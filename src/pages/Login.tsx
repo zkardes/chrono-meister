@@ -85,7 +85,7 @@ const Login = () => {
           </div>
           <CardTitle className="text-2xl text-center">Anmelden</CardTitle>
           <CardDescription className="text-center">
-            Melden Sie sich in Ihrem Chrono Meister Konto an
+            Melden Sie sich in Ihrem TimeTrack-Pro Konto an
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

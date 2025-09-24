@@ -153,7 +153,7 @@ const Landing = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="h-8 w-8 text-primary" />
-              <span className="text-2xl font-bold">TimeTrack Pro</span>
+              <span className="text-2xl font-bold">TimeTrack-Pro</span>
             </div>
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-6">
@@ -288,7 +288,7 @@ const Landing = () => {
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold mb-4">Das sagen unsere Kunden</h2>
             <p className="text-xl text-muted-foreground">
-              Über 1.000 Unternehmen vertrauen auf TimeTrack Pro
+              Über 1.000 Unternehmen vertrauen auf TimeTrack-Pro
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
@@ -355,7 +355,7 @@ const Landing = () => {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="h-6 w-6 text-primary" />
-                <span className="text-xl font-bold">TimeTrack Pro</span>
+                <span className="text-xl font-bold">TimeTrack-Pro</span>
               </div>
               <p className="text-sm text-muted-foreground">
                 Die moderne Lösung für digitale Zeiterfassung
@@ -387,7 +387,7 @@ const Landing = () => {
             </div>
           </div>
           <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
-            © 2024 TimeTrack Pro. Alle Rechte vorbehalten. Made with ❤️ in Germany
+            © 2024 TimeTrack-Pro. Alle Rechte vorbehalten. Made with ❤️ in Germany
           </div>
         </div>
       </footer>

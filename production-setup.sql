@@ -1,4 +1,4 @@
--- Production Database Setup Script for Chrono Meister
+-- Production Database Setup Script for TimeTrack-Pro
 -- Run this in your Supabase SQL Editor (https://supabase.com/dashboard/project/zcnhuvydqpotvgvwfcxs/sql)
 
 -- Create employees table
