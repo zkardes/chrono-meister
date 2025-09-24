@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronLeft, ChevronRight, Users, Plus, Settings, Edit, Trash2, Clock, X, Loader2, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Users, Plus, Settings, Edit, Trash2, Clock, X, Loader2, AlertTriangle, Download } from "lucide-react";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, isSameDay } from "date-fns";
 import { de } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +17,10 @@ import { useAuthContext } from "@/contexts/AuthContext";
 import { useTimeSlots, useScheduleAssignments, useEmployees } from "@/hooks/use-scheduling";
 import { useGroups } from "@/hooks/use-groups";
 import { useVacationConstraints } from "@/hooks/use-vacation";
+
+// Add jsPDF imports
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const Scheduling = () => {
   const { toast } = useToast();
@@ -316,6 +320,116 @@ const Scheduling = () => {
     return minutesA - minutesB;
   });
 
+  // Function to export the current week schedule as PDF
+  const exportScheduleToPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    // Add header with company info
+    const pageWidth = doc.internal.pageSize.width;
+    
+    // Company header with beige background
+    doc.setFillColor(245, 245, 220); // Beige
+    doc.rect(0, 0, pageWidth, 25, 'F');
+    
+    // Company name
+    doc.setFontSize(22);
+    doc.setTextColor(139, 69, 19); // Saddle brown
+    doc.setFont(undefined, 'bold');
+    doc.text(company?.name || 'ChronoMeister', pageWidth / 2, 15, { align: 'center' });
+    
+    // Report title
+    doc.setFontSize(16);
+    doc.setTextColor(160, 140, 120); // Light brown
+    doc.setFont(undefined, 'normal');
+    doc.text(
+      `Schichtplan ${format(weekStart, "dd. MMM", { locale: de })} - ${format(weekEnd, "dd. MMM yyyy", { locale: de })}`,
+      pageWidth / 2, 
+      22, 
+      { align: 'center' }
+    );
+    
+    // Prepare table data
+    const headerRow = ['Schicht'];
+    const subHeaderRow = [''];
+    
+    // Add day headers
+    weekDays.forEach(day => {
+      headerRow.push(format(day, "EEE", { locale: de }));
+      subHeaderRow.push(format(day, "dd.MM"));
+    });
+    
+    // Prepare schedule data
+    const tableData: any[] = [];
+    
+    sortedTimeSlots.forEach(slot => {
+      const row: any[] = [`${slot.name}\n${slot.start_time} - ${slot.end_time}`];
+      
+      weekDays.forEach(day => {
+        const employees = getEmployeesForSlot(day, slot.id);
+        if (employees.length > 0) {
+          const employeeNames = employees.map(emp => {
+            if (!canManageSchedules) {
+              return "Ihre Schicht";
+            }
+            return emp ? `${emp.first_name} ${emp.last_name.charAt(0)}.` : "Unknown";
+          }).join('\n');
+          row.push(employeeNames);
+        } else {
+          row.push('');
+        }
+      });
+      
+      tableData.push(row);
+    });
+    
+    // Add table to PDF
+    autoTable(doc, {
+      head: [headerRow, subHeaderRow],
+      body: tableData,
+      startY: 30,
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+        overflow: 'linebreak',
+        cellWidth: 'wrap',
+        valign: 'middle'
+      },
+      headStyles: {
+        fillColor: [230, 210, 180], // Light beige
+        textColor: [101, 67, 33], // Dark brown
+        fontSize: 10,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      bodyStyles: {
+        textColor: [0, 0, 0], // Black text
+        fontSize: 8,
+        halign: 'center'
+      },
+      alternateRowStyles: {
+        fillColor: [255, 255, 255] // White background
+      },
+      columnStyles: {
+        0: { 
+          cellWidth: 30,
+          fontStyle: 'bold',
+          halign: 'left',
+          fillColor: [245, 230, 210] // Slightly darker beige
+        }
+      },
+      theme: 'grid',
+      tableLineColor: [200, 180, 160],
+      tableLineWidth: 0.1
+    });
+    
+    // Save the PDF
+    doc.save(`schichtplan-${format(weekStart, "yyyy-MM-dd")}.pdf`);
+  };
+
   // Show loading state
   if (isLoading) {
     return (
@@ -353,6 +467,10 @@ const Scheduling = () => {
                 Zeitslots verwalten
               </Button>
             )}
+            <Button variant="outline" onClick={exportScheduleToPDF} className="w-full sm:w-auto">
+              <Download className="mr-2 h-4 w-4" />
+              Export PDF
+            </Button>
             {canManageSchedules && (
               <Select value={selectedGroup} onValueChange={setSelectedGroup}>
                 <SelectTrigger className="w-full sm:w-[200px]">
