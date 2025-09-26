@@ -3,22 +3,22 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Copy only package files first
+# Copy package files first for better caching
 COPY package*.json ./
-COPY package-lock.json ./
+COPY bun.lockb ./
 
-# Install dependencies with memory optimization
-RUN npm ci --silent --no-audit --no-fund --prefer-offline
+# Install dependencies
+RUN bun install
 
-# Copy only necessary files for build
-COPY src/ ./src/
-COPY public/ ./public/
-COPY vite.config.ts ./
-COPY tsconfig.json ./
-COPY index.html ./
+# Copy the rest of the source code (excluding large files via .dockerignore)
+COPY . .
 
-# Build with memory optimization
-RUN npm run build -- --max_old_space_size=512
+# Build the application with Node.js memory limit
+# The --max_old_space_size flag should be set as a Node.js option, not passed to Vite
+ENV NODE_OPTIONS="--max_old_space_size=512"
+
+# Build the application
+RUN bun run build
 
 # Stage 2: Serve
 FROM nginx:alpine
