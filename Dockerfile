@@ -4,10 +4,10 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 # Copy package files first for better caching
-COPY package*.json ./
-COPY package-lock.json ./  # Use package-lock.json instead of bun.lockb
+# Use explicit file names or copy to directory with trailing slash
+COPY package.json package-lock.json ./
 
-# Install dependencies using npm (which is available in node image)
+# Install dependencies using npm
 RUN npm ci --silent
 
 # Copy the rest of the source code (excluding large files via .dockerignore)
