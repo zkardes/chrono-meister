@@ -1,0 +1,22 @@
+# Ignore large media files
+*.mov
+*.mp4
+*.avi
+*.mkv
+public/assets/*.mov
+
+# Ignore git and build artifacts
+.git
+.gitignore
+node_modules/
+dist/
+build/
+*.tar
+*.gz
+
+# Ignore documentation and scripts
+*.md
+*.sql
+*.bat
+*.sh
+*.ps1
