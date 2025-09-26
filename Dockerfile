@@ -8,7 +8,8 @@ WORKDIR /app
 
 # Copy package files first for better caching
 COPY package*.json ./
-COPY bun.lockb ./
+# Use the correct lock file (package-lock.json instead of bun.lockb)
+COPY package-lock.json ./
 
 # Install dependencies
 RUN npm install
