@@ -1,26 +1,24 @@
 # Stage 1: Build
 FROM node:20-alpine AS build
 
-# Install git and bun
-RUN apk add --no-cache git
-# Install bun
-RUN npm install -g bun
-
 WORKDIR /app
 
-# Copy package files first for better caching
+# Copy only package files first
 COPY package*.json ./
-# Copy bun lock file
-COPY bun.lockb ./
+COPY package-lock.json ./
 
-# Install dependencies using bun
-RUN bun install
+# Install dependencies with memory optimization
+RUN npm ci --silent --no-audit --no-fund --prefer-offline
 
-# Copy the rest of the source code
-COPY . .
+# Copy only necessary files for build
+COPY src/ ./src/
+COPY public/ ./public/
+COPY vite.config.ts ./
+COPY tsconfig.json ./
+COPY index.html ./
 
-# Build the application
-RUN bun run build
+# Build with memory optimization
+RUN npm run build -- --max_old_space_size=512
 
 # Stage 2: Serve
 FROM nginx:alpine
