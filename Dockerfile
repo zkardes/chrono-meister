@@ -1,1 +1,26 @@
-# Stage 1: BuildFROM node:20-alpine AS build# Install git (needed for some npm packages)RUN apk add --no-cache gitWORKDIR /app# Copy package files first for better cachingCOPY package*.json ./COPY bun.lockb ./# Install dependenciesRUN npm install# Copy the rest of the source code (already cloned by Tekton)COPY . .# Build the applicationRUN npm run build# Stage 2: ServeFROM nginx:alpineCOPY --from=build /app/dist /usr/share/nginx/htmlEXPOSE 80CMD ["nginx", "-g", "daemon off;"]# Fri Sep 26 20:54:23 UTC 2025 - Dockerfile update
+# Stage 1: Build
+FROM node:20-alpine AS build
+
+# Install git (needed for some npm packages)
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package*.json ./
+COPY bun.lockb ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Stage 2: Serve
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
