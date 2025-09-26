@@ -1,24 +1,26 @@
 # Stage 1: Build
 FROM node:20-alpine AS build
 
-# Install git (needed for some npm packages)
+# Install git and bun
 RUN apk add --no-cache git
+# Install bun
+RUN npm install -g bun
 
 WORKDIR /app
 
 # Copy package files first for better caching
 COPY package*.json ./
-# Use the correct lock file (package-lock.json instead of bun.lockb)
-COPY package-lock.json ./
+# Copy bun lock file
+COPY bun.lockb ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies using bun
+RUN bun install
 
 # Copy the rest of the source code
 COPY . .
 
 # Build the application
-RUN npm run build
+RUN bun run build
 
 # Stage 2: Serve
 FROM nginx:alpine
