@@ -7,6 +7,8 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+chrono-meister.tar
+
 node_modules
 dist
 dist-ssr
