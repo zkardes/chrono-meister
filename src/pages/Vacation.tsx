@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,14 +10,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar as CalendarIcon, Plus, Check, X, User, Clock, FileText, Settings, Trash2, Timer } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Check, X, User, Clock, FileText, Settings, Trash2, Timer, Clock3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format, addDays, isWithinInterval, startOfDay } from "date-fns";
+import { format, addDays, isWithinInterval, startOfDay, differenceInMinutes } from "date-fns";
 import { de } from "date-fns/locale";
 import { useVacation, type VacationRequest, type Employee } from "@/hooks/use-vacation";
 import { useCompanyEmployees } from "@/hooks/use-company-data";
 import { useAuthContext } from "@/contexts/AuthContext";
 import VacationEntitlementsManager from "@/components/VacationEntitlementsManager";
+import { supabase } from "@/integrations/supabase/client";
+import { useVacationEntitlements } from "@/hooks/use-vacation-entitlements";
+import { generateVacationCalendarCSV, downloadCSV, generateVacationCalendarPDF } from "@/lib/csv-export";
 
 // Using types from the vacation hook instead of local interfaces
 
@@ -45,9 +48,19 @@ const Vacation = () => {
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showOvertimeDialog, setShowOvertimeDialog] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState("all");
   const [adminNote, setAdminNote] = useState("");
+  const [overtimeStats, setOvertimeStats] = useState({
+    totalOvertimeMinutes: 0,
+    overtimeDays: 0,
+    convertedOvertimeDays: 0, // Track converted overtime separately
+    isLoading: true
+  });
+  const [daysToConvert, setDaysToConvert] = useState(1);
+  const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger state
+  const [showExportDialog, setShowExportDialog] = useState(false);
   
   // Auth context and database hooks
   const { employee, isAdmin, company } = useAuthContext();
@@ -60,8 +73,314 @@ const Vacation = () => {
     approveRequest,
     deleteRequest,
     getVacationStats,
-    getEmployeeVacationDays
+    getEmployeeVacationDays,
+    refreshRequests
   } = useVacation();
+  
+  const { 
+    entitlements, 
+    getEmployeeEntitlement, 
+    getTotalVacationDays,
+    updateEntitlement,
+    refreshEntitlements
+  } = useVacationEntitlements();
+
+  // Get employee's configured work hours from Settings (fallback to 8 hours)
+  const getEmployeeWorkHours = (): number => {
+    if (!employee?.id) return 8;
+    
+    // Check if company has employee-specific work hours in settings with proper type checking
+    if (company?.settings && typeof company.settings === 'object' && company.settings !== null && 'employee_work_hours' in company.settings) {
+      const employeeWorkHours = company.settings.employee_work_hours;
+      if (typeof employeeWorkHours === 'object' && employeeWorkHours !== null && employee.id in employeeWorkHours) {
+        return employeeWorkHours[employee.id] as number;
+      }
+    }
+    
+    return 8; // Default
+  };
+
+  // Calculate overtime for the current employee (matching Dashboard calculation but with conceptual adjustment)
+  const calculateOvertime = async () => {
+    if (!employee?.id || !company?.created_at) return;
+    
+    try {
+      setOvertimeStats(prev => ({ ...prev, isLoading: true }));
+      
+      // Fetch time entries for the current employee
+      const { data: timeEntries, error } = await supabase
+        .from('time_entries')
+        .select('*')
+        .eq('employee_id', employee.id)
+        .not('end_time', 'is', null)
+        .order('start_time', { ascending: false });
+        
+      if (error) {
+        console.error('Error fetching time entries:', error);
+        toast({
+          title: "Fehler",
+          description: "Überstunden konnen nicht berechnet werden.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Get employee's configured work hours
+      const dailyWorkHours = getEmployeeWorkHours();
+      const dailyWorkMinutes = dailyWorkHours * 60;
+      
+      // Determine the start date: either beginning of the year or company creation date, whichever is later
+      const now = new Date();
+      const yearStart = new Date(now.getFullYear(), 0, 1);
+      const companyCreationDate = new Date(company.created_at);
+      const startDate = companyCreationDate > yearStart ? companyCreationDate : yearStart;
+      
+      // Filter time entries from start date to now
+      const relevantEntries = timeEntries?.filter(entry => {
+        const entryDate = new Date(entry.start_time);
+        return entryDate >= startDate && entryDate <= now;
+      }) || [];
+      
+      // Calculate total worked minutes
+      const totalWorkedMinutes = relevantEntries.reduce((total, entry) => {
+        if (entry.start_time && entry.end_time) {
+          const start = new Date(entry.start_time);
+          const end = new Date(entry.end_time);
+          const durationMinutes = differenceInMinutes(end, start);
+          return total + durationMinutes;
+        }
+        return total;
+      }, 0);
+      
+      // Calculate expected work days (weekdays only)
+      let expectedWorkDays = 0;
+      const currentDate = new Date(startDate);
+      const endDate = new Date(now);
+      
+      while (currentDate <= endDate) {
+        // Check if it's a weekday (Monday-Friday)
+        const dayOfWeek = currentDate.getDay();
+        if (dayOfWeek > 0 && dayOfWeek < 6) { // 0 = Sunday, 6 = Saturday
+          expectedWorkDays++;
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // Calculate expected work minutes
+      const expectedWorkMinutes = expectedWorkDays * dailyWorkMinutes;
+      
+      // Calculate overtime minutes (can be negative if worked less than expected)
+      let overtimeMinutes = totalWorkedMinutes - expectedWorkMinutes;
+      
+      // Get converted overtime days from entitlement bonus_days field
+      const currentYear = now.getFullYear();
+      const entitlement = getEmployeeEntitlement(employee.id, currentYear);
+      const convertedOvertimeDays = entitlement?.bonus_days && entitlement.bonus_days > 0 
+        ? entitlement.bonus_days 
+        : 0;
+      
+      // Conceptually adjust overtime minutes to reflect converted days
+      // This reduces the actual overtime by the converted amount
+      const convertedMinutes = convertedOvertimeDays * dailyWorkMinutes;
+      overtimeMinutes = overtimeMinutes - convertedMinutes;
+      
+      // Calculate total overtime days (only count positive overtime)
+      const totalOvertimeDays = Math.max(0, Math.floor(overtimeMinutes / dailyWorkMinutes));
+      
+      console.log('Overtime calculation details:', {
+        totalWorkedMinutes,
+        expectedWorkMinutes,
+        rawOvertimeMinutes: totalWorkedMinutes - expectedWorkMinutes,
+        convertedOvertimeDays,
+        convertedMinutes,
+        adjustedOvertimeMinutes: overtimeMinutes,
+        totalOvertimeDays
+      });
+      
+      setOvertimeStats(prev => ({
+        totalOvertimeMinutes: overtimeMinutes, // Adjusted overtime (can be negative)
+        overtimeDays: totalOvertimeDays, // Show only positive days available for conversion
+        convertedOvertimeDays, // Track converted overtime days from bonus_days
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Error calculating overtime:', error);
+      setOvertimeStats(prev => ({ ...prev, isLoading: false }));
+      toast({
+        title: "Fehler",
+        description: "Überstunden konnen nicht berechnet werden.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Convert overtime to vacation days
+  const handleConvertOvertime = async () => {
+    console.log('=== Starting Overtime Conversion ===');
+    console.log('Initial state:', { 
+      employeeId: employee?.id, 
+      overtimeDays: overtimeStats.overtimeDays, 
+      daysToConvert: daysToConvert,
+      convertedOvertimeDays: overtimeStats.convertedOvertimeDays,
+      totalOvertimeMinutes: overtimeStats.totalOvertimeMinutes
+    });
+    
+    if (!employee?.id || overtimeStats.overtimeDays <= 0 || daysToConvert <= 0) {
+      console.log('Validation failed:', { 
+        employeeId: employee?.id, 
+        overtimeDays: overtimeStats.overtimeDays, 
+        daysToConvert 
+      });
+      return;
+    }
+    
+    // Check if user is trying to convert more days than available
+    if (daysToConvert > overtimeStats.overtimeDays) {
+      toast({
+        title: "Fehler",
+        description: `Sie können maximal ${overtimeStats.overtimeDays} Tag(e) umrechnen.`,
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      // Get current year
+      const currentYear = new Date().getFullYear();
+      console.log('Current year:', currentYear);
+      
+      // Get employee's current entitlement
+      let entitlement = getEmployeeEntitlement(employee.id, currentYear);
+      console.log('Found entitlement:', entitlement);
+      
+      // If no entitlement exists for this year, we need to inform the user
+      if (!entitlement) {
+        toast({
+          title: "Fehler",
+          description: "Kein Urlaubsanspruch für dieses Jahr gefunden. Bitte wenden Sie sich an Ihren Administrator.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Verify that the entitlement has a valid ID
+      if (!entitlement.id) {
+        toast({
+          title: "Fehler",
+          description: "Ungültiger Urlaubsanspruch gefunden. Bitte wenden Sie sich an Ihren Administrator.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Update the entitlement to add bonus days for overtime
+      const bonusDaysToAdd = daysToConvert;
+      const currentBonusDays = entitlement.bonus_days || 0;
+      const newBonusDays = currentBonusDays + bonusDaysToAdd;
+      
+      console.log('Bonus days calculation:', { 
+        currentBonusDays, 
+        bonusDaysToAdd, 
+        newBonusDays 
+      });
+      
+      // Prepare update data - update bonus_days and add to notes
+      const updateData = {
+        bonus_days: newBonusDays,
+        notes: entitlement.notes 
+          ? `${entitlement.notes}\n\n${new Date().toLocaleDateString('de-DE')}: ${bonusDaysToAdd} Tage aus Überstunden hinzugefügt`
+          : `${new Date().toLocaleDateString('de-DE')}: ${bonusDaysToAdd} Tage aus Überstunden hinzugefügt`
+      };
+      
+      // Log for debugging
+      console.log('Updating entitlement with ID:', entitlement.id);
+      console.log('Update data:', updateData);
+      
+      // Call updateEntitlement and handle any potential errors
+      console.log('Calling updateEntitlement...');
+      try {
+        await updateEntitlement(entitlement.id, updateData);
+        console.log('Update entitlement completed successfully');
+      } catch (updateError) {
+        console.error('Error in updateEntitlement:', updateError);
+        throw updateError;
+      }
+      
+      // Reset days to convert
+      setDaysToConvert(1);
+      
+      setShowOvertimeDialog(false);
+      
+      // Refresh entitlements and vacation stats
+      console.log('Refreshing entitlements...');
+      await refreshEntitlements();
+      console.log('Entitlements refreshed');
+      
+      // Add a small delay to ensure the refresh completes
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Recalculate overtime stats to reflect the conversion
+      console.log('Recalculating overtime...');
+      await calculateOvertime();
+      console.log('Overtime recalculated');
+      
+      // Refresh vacation stats to show updated vacation days
+      console.log('Refreshing vacation stats...');
+      // Trigger a refresh of the vacation stats by invalidating the query
+      refreshRequests();
+      
+      // Trigger a UI refresh
+      setRefreshTrigger(prev => prev + 1);
+      
+      toast({
+        title: "Erfolg",
+        description: `Erfolgreich ${daysToConvert} Urlaubstag(e) aus Überstunden Ihrem Konto hinzugefügt. Ihre verbleibenden Überstunden wurden entsprechend reduziert.`
+      });
+      console.log('=== Overtime Conversion Completed ===');
+    } catch (error: any) {
+      console.error('=== Overtime Conversion Error ===');
+      console.error('Error converting overtime:', error);
+      console.error('Error stack:', error.stack);
+      console.error('================================');
+      
+      // Provide more specific error messages based on the error type
+      let errorMessage = "Überstunden konnten nicht umgerechnet werden.";
+      if (error.message) {
+        errorMessage += " " + error.message;
+      }
+      
+      toast({
+        title: "Fehler",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Load overtime stats when component mounts
+  useEffect(() => {
+    console.log('useEffect triggered - employee.id:', employee?.id, 'isAdmin:', isAdmin);
+    if (employee?.id && !isAdmin) {
+      console.log('Calculating overtime for employee:', employee.id);
+      calculateOvertime();
+    }
+  }, [employee?.id]);
+
+  // Add another useEffect to recalculate when entitlements change
+  useEffect(() => {
+    console.log('Entitlements changed, recalculating overtime if needed');
+    console.log('Entitlements data:', entitlements);
+    if (employee?.id && !isAdmin && entitlements && entitlements.length > 0) {
+      console.log('Recalculating overtime due to entitlements change');
+      calculateOvertime();
+    }
+  }, [entitlements, employee?.id]);
+
+  // useEffect to trigger refresh when refreshTrigger changes
+  useEffect(() => {
+    // This will cause the component to re-render and recalculate vacation stats
+    console.log('Refresh trigger changed, component will re-render');
+  }, [refreshTrigger]);
 
   // Format employee name according to specification
   const formatEmployeeName = (emp: Employee): string => {
@@ -272,37 +591,115 @@ const Vacation = () => {
     return request.employee_id === currentEmployeeId && (request.status === 'approved' || request.status === 'pending');
   };
 
+  // Export vacation calendar as CSV
+  const handleExportCalendar = async (format: 'csv' | 'pdf') => {
+    try {
+      // Get current year
+      const currentYear = new Date().getFullYear();
+      
+      // Fetch all vacation requests for the company
+      const { data: allVacationRequests, error: requestsError } = await supabase
+        .from('vacation_requests')
+        .select(`
+          *,
+          employee:employees!vacation_requests_employee_id_fkey(*)
+        `)
+        .eq('status', 'approved');
+        
+      if (requestsError) {
+        toast({
+          title: "Fehler",
+          description: "Urlaubsanträge konnten nicht abgerufen werden.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Filter by company on the client side
+      const companyRequests = (allVacationRequests || []).filter(
+        request => request.employee?.company_id === company?.id
+      );
+      
+      if (format === 'csv') {
+        // Generate CSV data
+        const csvData = generateVacationCalendarCSV(companyRequests, companyEmployees, currentYear);
+        
+        // Download CSV file
+        downloadCSV(csvData, `urlaubsplan-${currentYear}.csv`);
+      } else {
+        // Generate PDF with company name
+        generateVacationCalendarPDF(companyRequests, companyEmployees, currentYear, company?.name);
+      }
+      
+      toast({
+        title: "Export erfolgreich",
+        description: `Der Urlaubsplan für ${currentYear} wurde als ${format.toUpperCase()} exportiert.`
+      });
+      
+      setShowExportDialog(false);
+    } catch (error) {
+      console.error('Error exporting calendar:', error);
+      toast({
+        title: "Fehler",
+        description: "Der Urlaubsplan konnte nicht exportiert werden.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Urlaubsplanung</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold">Urlaubsplanung</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">
               {isAdmin 
                 ? "Verwalten Sie Urlaubsanträge und genehmigen Sie Urlaub" 
                 : "Verwalten Sie Ihre Urlaubsanträge und sehen Sie Team-Urlaube"}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button 
               onClick={() => setShowRequestDialog(true)}
               disabled={!canRequestVacation()}
+              className="w-full sm:w-auto"
             >
               <Plus className="mr-2 h-4 w-4" />
               Urlaub beantragen
             </Button>
+            {isAdmin && (
+              <Button 
+                onClick={() => setShowExportDialog(true)}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+            )}
+            {!isAdmin && (
+              <Button 
+                onClick={() => setShowOvertimeDialog(true)}
+                disabled={overtimeStats.overtimeDays <= 0}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                <Clock3 className="mr-2 h-4 w-4" />
+                Überstunden umrechnen
+              </Button>
+            )}
             {!canRequestVacation() && !isAdmin && (
-              <span className="text-sm text-muted-foreground self-center ml-2">
+              <span className="text-sm text-muted-foreground self-center ml-0 sm:ml-2 mt-2 sm:mt-0">
                 Keine Urlaubstage verfügbar
               </span>
             )}
           </div>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
           {/* Calendar */}
-          <Card className="md:col-span-1">
+          <Card className="lg:col-span-1">
             <CardHeader>
               <CardTitle>Urlaubskalender</CardTitle>
               <CardDescription>Übersicht genehmigter Urlaubstage</CardDescription>
@@ -319,14 +716,15 @@ const Vacation = () => {
                   vacation: { backgroundColor: '#dcfce7', color: '#166534', fontWeight: 'bold' }
                 }}
                 locale={de}
+                className="w-full"
               />
             </CardContent>
           </Card>
 
           {/* Main Content */}
-          <div className="md:col-span-2">
+          <div className="lg:col-span-2">
             <Tabs defaultValue="requests" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2">
                 <TabsTrigger value="requests">Urlaubsanträge</TabsTrigger>
                 {isAdmin && <TabsTrigger value="entitlements">Ansprüche verwalten</TabsTrigger>}
               </TabsList>
@@ -335,7 +733,7 @@ const Vacation = () => {
                 {/* Vacation Requests Content */}
                 <Card>
                   <CardHeader>
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                       <div>
                         <CardTitle>Urlaubsanträge</CardTitle>
                         <CardDescription>
@@ -344,7 +742,7 @@ const Vacation = () => {
                       </div>
                       {isAdmin && (
                         <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                          <SelectTrigger className="w-48">
+                          <SelectTrigger className="w-full sm:w-48">
                             <SelectValue placeholder="Mitarbeiter auswählen" />
                           </SelectTrigger>
                           <SelectContent>
@@ -373,17 +771,17 @@ const Vacation = () => {
                   getFilteredRequests().map((request) => {
                     const requestEmployee = request.employee;
                     return (
-                      <div key={request.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-                        <div className="flex items-center gap-4">
+                      <div key={request.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg hover:bg-muted/50 gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                           <User className="h-8 w-8 text-muted-foreground p-1 bg-muted rounded-full" />
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
+                          <div className="space-y-1 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
                               <p className="font-semibold">{requestEmployee ? formatEmployeeName(requestEmployee) : 'Unknown Employee'}</p>
                               {getStatusBadge(request.status)}
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-sm text-muted-foreground">
                               <div className="flex items-center gap-1">
-                                <CalendarIcon className="h-3 w-3" />
+                                <CalendarIcon className="h-33 w-3" />
                                 {format(new Date(request.start_date), "dd.MM.yyyy", { locale: de })} - {format(new Date(request.end_date), "dd.MM.yyyy", { locale: de })}
                               </div>
                               <div className="flex items-center gap-1">
@@ -391,13 +789,13 @@ const Vacation = () => {
                                 {request.days_requested} Tag{request.days_requested !== 1 ? 'e' : ''}
                               </div>
                             </div>
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
                               <FileText className="h-3 w-3" />
                               {request.reason}
                             </div>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           {isAdmin && request.status === 'pending' && (
                             <Button 
                               variant="outline" 
@@ -454,7 +852,7 @@ const Vacation = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
                 Gesamte Urlaubstage
@@ -492,7 +890,7 @@ const Vacation = () => {
             
           {/* Additional stats for all users */}
           <div className="mt-4 pt-4 border-t">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Beantragte Tage (ausstehend)</p>
                 <p className="text-2xl font-bold text-blue-600">{vacationStats.pendingDays}</p>
@@ -515,6 +913,55 @@ const Vacation = () => {
                 </p>
               </div>
             )}
+            
+            {/* Overtime stats for non-admin users */}
+            {!isAdmin && (
+              <div className="mt-4 pt-4 border-t">
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground flex items-center">
+                      <Clock3 className="mr-2 h-4 w-4" />
+                      Verfügbare Überstunden
+                    </p>
+                    <p className={`text-2xl font-bold ${
+                      overtimeStats.totalOvertimeMinutes <= 0 ? 'text-muted-foreground' : 'text-blue-600'
+                    }`}>
+                      {overtimeStats.isLoading ? 'Lädt...' : `${Math.floor(Math.abs(overtimeStats.totalOvertimeMinutes) / 60)}h ${Math.abs(overtimeStats.totalOvertimeMinutes) % 60}min`}
+                      <span className="text-sm block">
+                        ({overtimeStats.totalOvertimeMinutes >= 0 ? '+' : '-'}{Math.floor(Math.abs(overtimeStats.totalOvertimeMinutes) / (getEmployeeWorkHours() * 60))} Tage)
+                      </span>
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Umrechenbare Urlaubstage</p>
+                    <p className={`text-2xl font-bold ${
+                      overtimeStats.overtimeDays <= 0 ? 'text-muted-foreground' : 'text-green-600'
+                    }`}>
+                      {overtimeStats.isLoading ? 'Lädt...' : overtimeStats.overtimeDays}
+                      {overtimeStats.convertedOvertimeDays > 0 && (
+                        <span className="text-sm block text-muted-foreground">
+                          ({overtimeStats.convertedOvertimeDays} bereits umgerechnet)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                {overtimeStats.convertedOvertimeDays > 0 && (
+                  <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      ✓ Sie haben bereits {overtimeStats.convertedOvertimeDays} Tag(e) aus Überstunden in Urlaubstage umgerechnet.
+                    </p>
+                  </div>
+                )}
+                {overtimeStats.overtimeDays > 0 && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      ⚠️ Sie haben {overtimeStats.overtimeDays} Tag(e) an Überstunden, die Sie in Urlaubstage umrechnen können.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -529,7 +976,7 @@ const Vacation = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Startdatum</Label>
                 <Input 
@@ -687,6 +1134,142 @@ const Vacation = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Overtime Conversion Dialog */}
+      <Dialog open={showOvertimeDialog} onOpenChange={(open) => {
+        setShowOvertimeDialog(open);
+        if (!open) {
+          // Reset days to convert when dialog is closed
+          setDaysToConvert(1);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Überstunden in Urlaubstage umrechnen</DialogTitle>
+            <DialogDescription>
+              Wandeln Sie Ihre Überstunden in zusätzliche Urlaubstage um
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Verfügbare Überstunden</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {Math.floor(Math.abs(overtimeStats.totalOvertimeMinutes) / 60)} Stunden und {Math.abs(overtimeStats.totalOvertimeMinutes) % 60} Minuten
+                  <span className="text-sm block">
+                    ({overtimeStats.totalOvertimeMinutes >= 0 ? '+' : '-'}{Math.floor(Math.abs(overtimeStats.totalOvertimeMinutes) / (getEmployeeWorkHours() * 60))} Tage)
+                  </span>
+                </p>
+              </div>
+            </div>
+            
+            <div className="p-4 bg-green-50 rounded-lg">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Umrechenbare Urlaubstage</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {overtimeStats.overtimeDays} Tag{overtimeStats.overtimeDays !== 1 ? 'e' : ''}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Basierend auf Ihrer täglichen Arbeitszeit von {getEmployeeWorkHours()} Stunden
+                </p>
+              </div>
+            </div>
+            
+            {/* Days selection */}
+            <div className="space-y-2">
+              <Label htmlFor="days-to-convert">Anzahl der umzurechnenden Tage</Label>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setDaysToConvert(prev => Math.max(1, prev - 1))}
+                  disabled={daysToConvert <= 1}
+                >
+                  -
+                </Button>
+                <Input
+                  id="days-to-convert"
+                  type="number"
+                  min="1"
+                  max={overtimeStats.overtimeDays}
+                  value={daysToConvert}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    if (!isNaN(value) && value >= 1 && value <= overtimeStats.overtimeDays) {
+                      setDaysToConvert(value);
+                    }
+                  }}
+                  className="w-20 text-center"
+                />
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setDaysToConvert(prev => Math.min(overtimeStats.overtimeDays, prev + 1))}
+                  disabled={daysToConvert >= overtimeStats.overtimeDays}
+                >
+                  +
+                </Button>
+                <span className="text-sm text-muted-foreground ml-2">
+                  von max. {overtimeStats.overtimeDays}
+                </span>
+              </div>
+            </div>
+            
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                ⚠️ Diese Aktion wandelt Ihre Überstunden dauerhaft in zusätzliche Urlaubstage um. 
+                Die umgerechneten Tage werden Ihrem Urlaubskonto als Bonus-Tage hinzugefügt und können wie reguläre Urlaubstage beantragt werden.
+                Ihre Gesamtüberstunden werden um die umgerechneten Tage reduziert.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowOvertimeDialog(false)}>Abbrechen</Button>
+            <Button 
+              onClick={handleConvertOvertime}
+              disabled={overtimeStats.overtimeDays <= 0 || daysToConvert <= 0 || daysToConvert > overtimeStats.overtimeDays}
+            >
+              <Clock3 className="mr-2 h-4 w-4" />
+              Umrechnen und hinzufügen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export-Format auswählen</DialogTitle>
+            <DialogDescription>
+              Wählen Sie das Format für den Export des Urlaubsplans
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <Button 
+              onClick={() => handleExportCalendar('csv')}
+              className="w-full"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              CSV-Datei exportieren
+            </Button>
+            <Button 
+              onClick={() => handleExportCalendar('pdf')}
+              variant="outline"
+              className="w-full"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              PDF-Datei exportieren
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              Abbrechen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
     </DashboardLayout>
   );

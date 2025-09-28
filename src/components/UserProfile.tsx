@@ -36,7 +36,7 @@ const UserProfile = () => {
   }
 
   return (
-    <Card className="w-full max-w-md">
+    <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <User className="h-5 w-5" />
@@ -51,7 +51,7 @@ const UserProfile = () => {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">{user?.email}</span>
+            <span className="text-sm break-all">{user?.email}</span>
           </div>
           
           {/* Role Badge */}
@@ -75,7 +75,7 @@ const UserProfile = () => {
               <div className="space-y-1">
                 <p className="font-medium">{company.name}</p>
                 {company.domain && (
-                  <p className="text-xs text-muted-foreground">{company.domain}</p>
+                  <p className="text-xs text-muted-foreground break-all">{company.domain}</p>
                 )}
                 {company.timezone && (
                   <p className="text-xs text-muted-foreground">Zeitzone: {company.timezone}</p>
@@ -92,10 +92,10 @@ const UserProfile = () => {
             <div className="space-y-2">
               <h4 className="font-medium text-sm">Mitarbeiterdetails</h4>
               
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Name:</span>
-                  <p>{getFullEmployeeName(employee)}</p>
+                  <p className="break-all">{getFullEmployeeName(employee)}</p>
                 </div>
                 
                 <div>

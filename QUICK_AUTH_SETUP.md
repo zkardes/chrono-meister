@@ -17,13 +17,13 @@ Create auth users directly in the database with fake emails!
 ### **Step 1: Run Database Cleanup (if not done already)**
 
 1. Go to **Supabase Dashboard** → **SQL Editor**
-2. Copy and paste content from [`MANUAL_DATABASE_CLEANUP.sql`](file:///Users/zkardes/Documents/GitHub/chrono-meister/MANUAL_DATABASE_CLEANUP.sql)
+2. Copy and paste content from [`MANUAL_DATABASE_CLEANUP.sql`](file:///Users/zkardes/Documents/GitHub/TimeTrack-Pro/MANUAL_DATABASE_CLEANUP.sql)
 3. Click **"Run"**
 
 ### **Step 2: Create Authentication Users**
 
 1. **Stay in the SQL Editor**
-2. Copy and paste the entire content from [`CREATE_AUTH_USERS_DIRECT.sql`](file:///Users/zkardes/Documents/GitHub/chrono-meister/CREATE_AUTH_USERS_DIRECT.sql)
+2. Copy and paste the entire content from [`CREATE_AUTH_USERS_DIRECT.sql`](file:///Users/zkardes/Documents/GitHub/TimeTrack-Pro/CREATE_AUTH_USERS_DIRECT.sql)
 3. Click **"Run"**
 
 ### **Step 3: Test Login**

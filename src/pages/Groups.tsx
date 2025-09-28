@@ -363,33 +363,33 @@ const Groups = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Gruppen</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold">Gruppen</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">
               Verwalten Sie Teams, Abteilungen und Mitarbeiterzuordnungen
             </p>
           </div>
-          <Button onClick={handleExport} disabled={!groups.length}>
+          <Button onClick={handleExport} disabled={!groups.length} className="w-full sm:w-auto">
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
         </div>
 
         {/* Group Management */}
-        <Tabs defaultValue="list" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="list">Gruppenliste</TabsTrigger>
-            <TabsTrigger value="create" disabled={!canManageGroups}>
+        <Tabs defaultValue="list" className="space-y-4 w-full">
+          <TabsList className="grid w-full grid-cols-1 sm:grid-cols-4 gap-2 p-1 bg-muted rounded-lg">
+            <TabsTrigger value="list" className="whitespace-nowrap">Gruppenliste</TabsTrigger>
+            <TabsTrigger value="create" disabled={!canManageGroups} className="whitespace-nowrap">
               Gruppe erstellen
             </TabsTrigger>
-            <TabsTrigger value="assign" disabled={!canManageGroups}>
+            <TabsTrigger value="assign" disabled={!canManageGroups} className="whitespace-nowrap">
               Mitarbeiter zuordnen
             </TabsTrigger>
-            <TabsTrigger value="statistics">Statistiken</TabsTrigger>
+            <TabsTrigger value="statistics" className="whitespace-nowrap">Statistiken</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="list">
+          <TabsContent value="list" className="mt-2">
             <Card>
               <CardHeader>
                 <CardTitle>Alle Gruppen</CardTitle>
@@ -413,31 +413,31 @@ const Groups = () => {
                     </div>
                   ) : (
                     groups.map((group) => (
-                      <div key={group.id} className="border rounded-lg p-4 hover:bg-muted/50">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="space-y-1 flex-1">
-                            <div className="flex items-center gap-2">
-                              <Building className="h-5 w-5 text-primary" />
-                              <h3 className="font-semibold text-lg">{group.name}</h3>
+                      <div key={group.id} className="border rounded-lg p-4 hover:bg-muted/50 overflow-hidden">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                          <div className="space-y-2 flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Building className="h-5 w-5 text-primary flex-shrink-0" />
+                              <h3 className="font-semibold text-lg truncate">{group.name}</h3>
                               <Badge variant="outline">Aktiv</Badge>
                             </div>
                             {group.description && (
-                              <p className="text-muted-foreground">{group.description}</p>
+                              <p className="text-muted-foreground text-sm">{group.description}</p>
                             )}
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                               {group.manager && (
-                                <span>Manager: {getFullEmployeeName(group.manager)}</span>
+                                <span className="truncate">Manager: {getFullEmployeeName(group.manager)}</span>
                               )}
                               {group.created_at && (
                                 <span>Erstellt: {format(new Date(group.created_at), 'dd.MM.yyyy', { locale: de })}</span>
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-right mr-4">
-                              <div className="flex items-center gap-1 text-sm text-muted-foreground mb-1">
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="text-right mr-2">
+                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                 <Users className="h-4 w-4" />
-                                {group.member_count} Mitglieder
+                                <span>{group.member_count} Mitglieder</span>
                               </div>
                             </div>
                             {canManageGroups && (
@@ -445,7 +445,7 @@ const Groups = () => {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleDeleteGroup(group.id, group.name)}
-                                className="text-red-600 hover:text-red-700"
+                                className="text-red-600 hover:text-red-700 flex-shrink-0"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -467,17 +467,17 @@ const Groups = () => {
                           ) : (
                             <div className="flex flex-wrap gap-2">
                               {group.members.map((member) => (
-                                <div key={member.id} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1">
-                                  <User className="h-3 w-3" />
-                                  <span className="text-sm">{getFullEmployeeName(member.employee)}</span>
+                                <div key={member.id} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1 max-w-full">
+                                  <User className="h-3 w-3 flex-shrink-0" />
+                                  <span className="text-sm truncate">{getFullEmployeeName(member.employee)}</span>
                                   {member.employee.position && (
-                                    <span className="text-xs text-muted-foreground">({member.employee.position})</span>
+                                    <span className="text-xs text-muted-foreground truncate">({member.employee.position})</span>
                                   )}
                                   {canManageGroups && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-4 w-4 p-0 ml-1"
+                                      className="h-4 w-4 p-0 ml-1 flex-shrink-0"
                                       onClick={() => handleRemoveEmployeeFromGroup(
                                         group.id, 
                                         member.employee.id, 
@@ -501,7 +501,7 @@ const Groups = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="create">
+          <TabsContent value="create" className="mt-2">
             {canManageGroups ? (
               <Card>
                 <CardHeader>
@@ -571,9 +571,9 @@ const Groups = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="assign">
+          <TabsContent value="assign" className="mt-2">
             {canManageGroups ? (
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
                 <Card>
                   <CardHeader>
                     <CardTitle>Mitarbeiter auswählen</CardTitle>
@@ -598,16 +598,26 @@ const Groups = () => {
                               id={`employee-${employee.id}`}
                               checked={selectedEmployees.includes(employee.id)}
                               onCheckedChange={() => toggleEmployeeSelection(employee.id)}
-                              disabled={isSubmitting}
                             />
-                            <div className="flex-1">
-                              <Label htmlFor={`employee-${employee.id}`} className="font-medium cursor-pointer">
-                                {getFullEmployeeName(employee)}
-                              </Label>
-                              <p className="text-sm text-muted-foreground">
-                                {employee.position || 'Keine Position'} • {employee.department || 'Keine Abteilung'}
-                              </p>
-                            </div>
+                            <Label htmlFor={`employee-${employee.id}`} className="flex items-center gap-2 cursor-pointer flex-1">
+                              <User className="h-5 w-5 text-muted-foreground" />
+                              <div>
+                                <p className="font-medium">{getFullEmployeeName(employee)}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {employee.position || 'Keine Position'} • {employee.department || 'Keine Abteilung'}
+                                </p>
+                              </div>
+                            </Label>
+                            {selectedEmployees.includes(employee.id) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeEmployeeFromSelection(employee.id)}
+                                className="h-6 w-6 p-0"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -617,15 +627,19 @@ const Groups = () => {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Ausgewählte Mitarbeiter ({selectedEmployees.length})</CardTitle>
+                    <CardTitle>Gruppe auswählen</CardTitle>
                     <CardDescription>
-                      Mitarbeiter, die einer Gruppe zugeordnet werden
+                      Wählen Sie die Zielgruppe für die ausgewählten Mitarbeiter
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Zielgruppe</Label>
-                      <Select value={selectedGroupId || "no-group"} onValueChange={(value) => value !== "no-group" && setSelectedGroupId(value)} disabled={isSubmitting}>
+                      <Label>Gruppe</Label>
+                      <Select 
+                        value={selectedGroupId} 
+                        onValueChange={setSelectedGroupId}
+                        disabled={isSubmitting}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Gruppe auswählen" />
                         </SelectTrigger>
@@ -640,44 +654,30 @@ const Groups = () => {
                       </Select>
                     </div>
                     
-                    <div className="space-y-2">
-                      <Label>Ausgewählte Mitarbeiter:</Label>
-                      <div className="min-h-[200px] max-h-[300px] overflow-y-auto space-y-2">
-                        {selectedEmployees.length === 0 ? (
-                          <p className="text-muted-foreground text-sm text-center py-8">
-                            Keine Mitarbeiter ausgewählt
-                          </p>
-                        ) : (
-                          selectedEmployees.map((employeeId) => {
+                    {selectedEmployees.length > 0 && (
+                      <div className="p-3 bg-muted rounded-lg">
+                        <p className="text-sm font-medium mb-2">Ausgewählte Mitarbeiter ({selectedEmployees.length}):</p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedEmployees.map((employeeId) => {
                             const employee = employees.find(emp => emp.id === employeeId);
                             return employee ? (
-                              <div key={employee.id} className="flex items-center justify-between p-2 bg-muted rounded-lg">
-                                <div>
-                                  <p className="font-medium">{getFullEmployeeName(employee)}</p>
-                                  <p className="text-sm text-muted-foreground">{employee.position || 'Keine Position'}</p>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeEmployeeFromSelection(employee.id)}
-                                  disabled={isSubmitting}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
+                              <Badge key={employeeId} variant="secondary" className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                {getFullEmployeeName(employee)}
+                              </Badge>
                             ) : null;
-                          })
-                        )}
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )}
                     
                     <Button 
                       onClick={handleAddEmployeesToGroup}
-                      disabled={selectedEmployees.length === 0 || !selectedGroupId || selectedGroupId === "no-group" || isSubmitting}
+                      disabled={isSubmitting || selectedEmployees.length === 0 || !selectedGroupId || selectedGroupId === "no-group"}
                       className="w-full"
                     >
                       <UserPlus className="mr-2 h-4 w-4" />
-                      {isSubmitting ? 'Wird hinzugefügt...' : 'Mitarbeiter zur Gruppe hinzufügen'}
+                      {isSubmitting ? 'Wird hinzugefügt...' : `Mitarbeiter hinzufügen (${selectedEmployees.length})`}
                     </Button>
                   </CardContent>
                 </Card>
@@ -686,9 +686,9 @@ const Groups = () => {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center space-y-4">
-                    <p className="text-destructive">Keine Berechtigung zum Zuweisen von Mitarbeitern</p>
+                    <p className="text-destructive">Keine Berechtigung zur Mitarbeiterzuordnung</p>
                     <p className="text-muted-foreground">
-                      Nur Administratoren und Manager können Mitarbeiter zu Gruppen zuordnen.
+                      Nur Administratoren und Manager können Mitarbeiter Gruppen zuordnen.
                     </p>
                   </div>
                 </CardContent>
@@ -696,7 +696,7 @@ const Groups = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="statistics">
+          <TabsContent value="statistics" className="mt-2">
             <Card>
               <CardHeader>
                 <CardTitle>Gruppen-Statistiken</CardTitle>

@@ -24,7 +24,10 @@ export const useCompanyEmployees = () => {
       const { data, error } = await withRetry(async () =>
         await supabase
           .from('employees')
-          .select('*')
+          .select(`
+            *,
+            user_profile:user_profiles(role)
+          `)
           .eq('company_id', company.id)
           .eq('is_active', true)
           .order('first_name')
@@ -34,7 +37,7 @@ export const useCompanyEmployees = () => {
         const errorMessage = handleDatabaseError(error, 'fetch company employees');
         throw new Error(errorMessage);
       }
-      return data as Employee[];
+      return data as (Employee & { user_profile: { role: string } | null })[];
     },
     enabled: !!company?.id,
   });

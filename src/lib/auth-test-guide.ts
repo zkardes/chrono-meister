@@ -2,7 +2,7 @@
  * Authentication Test and Debug Guide
  * 
  * This file contains instructions and tools for testing and debugging
- * the authentication issues in Chrono Meister.
+ * the authentication issues in TimeTrack-Pro.
  */
 
 // DEBUGGING STEPS:

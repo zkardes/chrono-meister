@@ -85,7 +85,7 @@ const Register = () => {
           </div>
           <CardTitle className="text-2xl text-center">Konto erstellen</CardTitle>
           <CardDescription className="text-center">
-            Registrieren Sie sich für Ihr Chrono Meister Konto
+            Registrieren Sie sich für Ihr TimeTrack-Pro Konto
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

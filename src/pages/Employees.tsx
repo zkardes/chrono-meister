@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,32 @@ const Employees = () => {
   const { company, isAdmin, isManager } = useAuthContext();
   const { data: employees = [], isLoading, error, refetch } = useCompanyEmployees();
   const { createEmployee, updateEmployee, deactivateEmployee, reactivateEmployee } = useEmployeeManagement();
+  
+  // Check for selected employee from localStorage (from Dashboard)
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  
+  useEffect(() => {
+    // Check if there's a selected employee ID in localStorage
+    const storedEmployeeId = localStorage.getItem('selectedEmployeeId');
+    if (storedEmployeeId) {
+      setSelectedEmployeeId(storedEmployeeId);
+      // Remove it from localStorage so it doesn't persist
+      localStorage.removeItem('selectedEmployeeId');
+      
+      // Scroll to the selected employee after a short delay to ensure DOM is ready
+      setTimeout(() => {
+        const element = document.getElementById(`employee-${storedEmployeeId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Add a temporary highlight effect
+          element.classList.add('bg-yellow-100');
+          setTimeout(() => {
+            element.classList.remove('bg-yellow-100');
+          }, 2000);
+        }
+      }, 100);
+    }
+  }, []);
   
   // Form state for adding new employee
   const [newEmployeeData, setNewEmployeeData] = useState<CreateEmployeeData>({
@@ -249,30 +275,30 @@ const Employees = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Mitarbeiter</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold">Mitarbeiter</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">
               Verwalten Sie Ihr Team und Mitarbeiterinformationen
             </p>
           </div>
-          <Button onClick={handleExport} disabled={!employees.length}>
+          <Button onClick={handleExport} disabled={!employees.length} className="w-full sm:w-auto">
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
         </div>
 
         {/* Employee Management */}
-        <Tabs defaultValue="list" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="list">Mitarbeiterliste</TabsTrigger>
+        <Tabs defaultValue="list" className="space-y-4 w-full">
+          <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 gap-2 p-1 bg-muted rounded-lg">
+            <TabsTrigger value="list" className="whitespace-nowrap">Mitarbeiterliste</TabsTrigger>
             {canManageEmployees && (
-              <TabsTrigger value="add">Mitarbeiter hinzufügen</TabsTrigger>
+              <TabsTrigger value="add" className="whitespace-nowrap">Mitarbeiter hinzufügen</TabsTrigger>
             )}
-            <TabsTrigger value="statistics">Statistiken</TabsTrigger>
+            <TabsTrigger value="statistics" className="whitespace-nowrap">Statistiken</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="list">
+          <TabsContent value="list" className="mt-2">
             <Card>
               <CardHeader>
                 <CardTitle>Alle Mitarbeiter</CardTitle>
@@ -296,50 +322,56 @@ const Employees = () => {
                     </div>
                   ) : (
                     employees.map((employee) => (
-                      <div key={employee.id} className="flex items-center justify-between p-4 rounded-lg hover:bg-muted border">
-                        <div className="flex items-center gap-4">
-                          <User className="h-8 w-8 text-muted-foreground p-1 bg-muted rounded-full" />
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-semibold">{getFullEmployeeName(employee)}</p>
+                      <div 
+                        key={employee.id} 
+                        id={`employee-${employee.id}`}
+                        className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg hover:bg-muted border gap-4 overflow-hidden ${
+                          selectedEmployeeId === employee.id ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <User className="h-8 w-8 text-muted-foreground p-1 bg-muted rounded-full flex-shrink-0" />
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold truncate">{getFullEmployeeName(employee)}</p>
                               {employee.auth_user_id && (
-                                <Badge variant="secondary" className="text-xs">
+                                <Badge variant="secondary" className="text-xs flex-shrink-0">
                                   Verknüpft
                                 </Badge>
                               )}
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <Mail className="h-3 w-3" />
-                                {employee.email}
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                              <div className="flex items-center gap-1 min-w-0">
+                                <Mail className="h-3 w-3 flex-shrink-0" />
+                                <span className="truncate">{employee.email}</span>
                               </div>
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right space-y-1">
-                            <p className="font-semibold">{employee.position || 'Keine Position'}</p>
-                            <p className="text-sm text-muted-foreground">{employee.department || 'Keine Abteilung'}</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0">
+                          <div className="space-y-1 min-w-0">
+                            <p className="font-semibold truncate">{employee.position || 'Keine Position'}</p>
+                            <p className="text-sm text-muted-foreground truncate">{employee.department || 'Keine Abteilung'}</p>
                             {employee.hire_date && (
                               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <Calendar className="h-3 w-3" />
-                                Seit {format(new Date(employee.hire_date), 'dd.MM.yyyy', { locale: de })}
+                                <span className="truncate">Seit {format(new Date(employee.hire_date), 'dd.MM.yyyy', { locale: de })}</span>
                               </div>
                             )}
-                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium truncate ${
                               employee.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                             }`}>
                               {employee.is_active ? 'Aktiv' : 'Inaktiv'}
                             </span>
                           </div>
                           {canManageEmployees && (
-                            <div className="flex flex-col gap-2">
+                            <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0">
                               {employee.is_active ? (
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleDeactivateEmployee(employee.id, getFullEmployeeName(employee))}
-                                  className="text-red-600 hover:text-red-700"
+                                  className="text-red-600 hover:text-red-700 flex-shrink-0"
                                 >
                                   <UserX className="h-4 w-4" />
                                 </Button>
@@ -348,7 +380,7 @@ const Employees = () => {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleReactivateEmployee(employee.id, getFullEmployeeName(employee))}
-                                  className="text-green-600 hover:text-green-700"
+                                  className="text-green-600 hover:text-green-700 flex-shrink-0"
                                 >
                                   <UserCheck className="h-4 w-4" />
                                 </Button>
@@ -365,7 +397,7 @@ const Employees = () => {
           </TabsContent>
 
           {canManageEmployees && (
-            <TabsContent value="add">
+            <TabsContent value="add" className="mt-2">
               <Card>
                 <CardHeader>
                   <CardTitle>Neuen Mitarbeiter hinzufügen</CardTitle>
@@ -374,7 +406,7 @@ const Employees = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">Vorname *</Label>
                       <Input
@@ -407,7 +439,7 @@ const Employees = () => {
                       disabled={isSubmitting}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="employeeId">Mitarbeiter-ID</Label>
                       <Input
@@ -429,7 +461,7 @@ const Employees = () => {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="department">Abteilung</Label>
                       <Input
@@ -466,7 +498,7 @@ const Employees = () => {
                       disabled={isSubmitting}
                     />
                   </div>
-                  <Button onClick={handleAddEmployee} disabled={isSubmitting}>
+                  <Button onClick={handleAddEmployee} disabled={isSubmitting} className="w-full sm:w-auto">
                     <Plus className="mr-2 h-4 w-4" />
                     {isSubmitting ? 'Wird hinzugefügt...' : 'Mitarbeiter hinzufügen'}
                   </Button>
@@ -475,7 +507,7 @@ const Employees = () => {
             </TabsContent>
           )}
 
-          <TabsContent value="statistics">
+          <TabsContent value="statistics" className="mt-2">
             <Card>
               <CardHeader>
                 <CardTitle>Team-Statistiken</CardTitle>
@@ -484,7 +516,7 @@ const Employees = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">Aktive Mitarbeiter</p>
                     <p className="text-2xl font-bold">{activeEmployees.length}</p>
@@ -504,7 +536,7 @@ const Employees = () => {
                     <hr className="my-4" />
                     <div className="space-y-4">
                       <h4 className="font-medium">Abteilungen</h4>
-                      <div className="grid gap-2 md:grid-cols-2">
+                      <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
                         {departments.map((dept) => {
                           const deptEmployees = activeEmployees.filter(emp => emp.department === dept);
                           return (

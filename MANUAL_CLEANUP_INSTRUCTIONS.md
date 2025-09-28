@@ -6,12 +6,12 @@ Since there are network connectivity issues with the CLI, please follow these st
 
 1. **Open your browser** and go to: https://supabase.com/dashboard
 2. **Login** to your account
-3. **Navigate** to your project: `chrono-meister` (Project ID: zcnhuvydqpotvgvwfcxs)
+3. **Navigate** to your project: `TimeTrack-Pro` (Project ID: zcnhuvydqpotvgvwfcxs)
 4. **Click** on "SQL Editor" in the left sidebar
 
 ## 🗄️ **Step 2: Run the Cleanup Script**
 
-1. **Copy the entire content** from the file: [`MANUAL_DATABASE_CLEANUP.sql`](file:///Users/zkardes/Documents/GitHub/chrono-meister/MANUAL_DATABASE_CLEANUP.sql)
+1. **Copy the entire content** from the file: [`MANUAL_DATABASE_CLEANUP.sql`](file:///Users/zkardes/Documents/GitHub/TimeTrack-Pro/MANUAL_DATABASE_CLEANUP.sql)
 
 2. **Paste it** into the SQL Editor in Supabase Dashboard
 
@@ -140,7 +140,7 @@ If you want to try the CLI again later:
 
 ```bash
 # Try the migration again when network is stable
-cd /Users/zkardes/Documents/GitHub/chrono-meister
+cd /Users/zkardes/Documents/GitHub/TimeTrack-Pro
 supabase db push
 ```
 

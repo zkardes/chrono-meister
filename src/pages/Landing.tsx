@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Check, Clock, FileText, Users, Calendar, TrendingUp, Shield, Zap } from "lucide-react";
+import { Check, Clock, FileText, Users, Calendar, TrendingUp, Shield, Zap, Menu, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthActions } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -13,6 +13,7 @@ const Landing = () => {
   const { signIn } = useAuthActions();
   const { toast } = useToast();
   const [isDemoLoading, setIsDemoLoading] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleDemoLogin = async () => {
     setIsDemoLoading(true);
@@ -152,8 +153,9 @@ const Landing = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="h-8 w-8 text-primary" />
-              <span className="text-2xl font-bold">TimeTrack Pro</span>
+              <span className="text-2xl font-bold">TimeTrack-Pro</span>
             </div>
+            {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-6">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
                 Funktionen
@@ -171,7 +173,51 @@ const Landing = () => {
                 <Button variant="hero">Registrieren</Button>
               </Link>
             </div>
+            {/* Mobile Menu Button */}
+            <div className="md:hidden">
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+              >
+                {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              </Button>
+            </div>
           </div>
+          {/* Mobile Navigation Menu */}
+          {isMenuOpen && (
+            <div className="md:hidden mt-4 pb-4 space-y-4">
+              <a 
+                href="#features" 
+                className="block text-muted-foreground hover:text-foreground transition-colors py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Funktionen
+              </a>
+              <a 
+                href="#testimonials" 
+                className="block text-muted-foreground hover:text-foreground transition-colors py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Referenzen
+              </a>
+              <a 
+                href="#pricing" 
+                className="block text-muted-foreground hover:text-foreground transition-colors py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Preise
+              </a>
+              <div className="flex gap-2 pt-2">
+                <Link to="/login" className="flex-1">
+                  <Button variant="outline" className="w-full" onClick={() => setIsMenuOpen(false)}>Anmelden</Button>
+                </Link>
+                <Link to="/register" className="flex-1">
+                  <Button variant="hero" className="w-full" onClick={() => setIsMenuOpen(false)}>Registrieren</Button>
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 
@@ -242,7 +288,7 @@ const Landing = () => {
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold mb-4">Das sagen unsere Kunden</h2>
             <p className="text-xl text-muted-foreground">
-              Über 1.000 Unternehmen vertrauen auf TimeTrack Pro
+              Über 1.000 Unternehmen vertrauen auf TimeTrack-Pro
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
@@ -309,7 +355,7 @@ const Landing = () => {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="h-6 w-6 text-primary" />
-                <span className="text-xl font-bold">TimeTrack Pro</span>
+                <span className="text-xl font-bold">TimeTrack-Pro</span>
               </div>
               <p className="text-sm text-muted-foreground">
                 Die moderne Lösung für digitale Zeiterfassung
@@ -341,7 +387,7 @@ const Landing = () => {
             </div>
           </div>
           <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
-            © 2024 TimeTrack Pro. Alle Rechte vorbehalten. Made with ❤️ in Germany
+            © 2024 TimeTrack-Pro. Alle Rechte vorbehalten. Made with ❤️ in Germany
           </div>
         </div>
       </footer>

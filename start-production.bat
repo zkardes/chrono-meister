@@ -1,6 +1,6 @@
 @echo off
-REM Chrono Meister - Production Startup Script
-echo Starting Chrono Meister with Production Database...
+REM TimeTrack-Pro - Production Startup Script
+echo Starting TimeTrack-Pro with Production Database...
 echo.
 
 REM Set Node.js in PATH for this session

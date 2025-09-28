@@ -24,6 +24,24 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type TimeEntry = Tables<'time_entries'>;
 
@@ -44,6 +62,8 @@ const TimeTracking = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [entryToDelete, setEntryToDelete] = useState<TimeEntry | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
   
   // Manual entry form state
   const [manualEntry, setManualEntry] = useState({
@@ -619,6 +639,234 @@ const TimeTracking = () => {
     }
   };
 
+  // Function to export time entries as PDF
+  const exportTimeEntriesToPDF = async (month: string) => {
+    if (!employee?.id || !month) return;
+    
+    try {
+      // Fetch time entries for the selected month
+      const [year, monthIndex] = month.split('-').map(Number);
+      const startDate = new Date(year, monthIndex - 1, 1);
+      const endDate = new Date(year, monthIndex, 0); // Last day of the month
+      
+      const { data: entries, error } = await supabase
+        .from('time_entries')
+        .select('*')
+        .eq('employee_id', employee.id)
+        .gte('start_time', startDate.toISOString())
+        .lte('start_time', endDate.toISOString())
+        .order('start_time', { ascending: true });
+        
+      if (error) {
+        toast({
+          title: "Fehler",
+          description: "Zeiteinträge konnten nicht abgerufen werden.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Group entries by date
+      const groupedEntries: Record<string, TimeEntry[]> = {};
+      entries.forEach(entry => {
+        const dateKey = format(new Date(entry.start_time), 'yyyy-MM-dd');
+        if (!groupedEntries[dateKey]) {
+          groupedEntries[dateKey] = [];
+        }
+        groupedEntries[dateKey].push(entry);
+      });
+      
+      // Calculate daily totals
+      const dailyTotals: Record<string, { workTime: number; breakTime: number }> = {};
+      Object.entries(groupedEntries).forEach(([date, entries]) => {
+        let totalWorkTime = 0;
+        let totalBreakTime = 0;
+        
+        entries.forEach(entry => {
+          if (entry.end_time) {
+            const workDuration = differenceInMinutes(new Date(entry.end_time), new Date(entry.start_time));
+            totalWorkTime += workDuration;
+            totalBreakTime += entry.break_duration || 0;
+          }
+        });
+        
+        dailyTotals[date] = {
+          workTime: totalWorkTime,
+          breakTime: totalBreakTime
+        };
+      });
+      
+      // Create PDF document
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      // Add header with company info
+      const pageWidth = doc.internal.pageSize.width;
+      
+      // Company header with beige background
+      doc.setFillColor(245, 245, 220); // Beige
+      doc.rect(0, 0, pageWidth, 25, 'F');
+      
+      // Company name
+      doc.setFontSize(22);
+      doc.setTextColor(139, 69, 19); // Saddle brown
+      doc.setFont(undefined, 'bold');
+      doc.text(company?.name || 'ChronoMeister', pageWidth / 2, 15, { align: 'center' });
+      
+      // Report title
+      doc.setFontSize(16);
+      doc.setTextColor(160, 140, 120); // Light brown
+      doc.setFont(undefined, 'normal');
+      doc.text(
+        `Arbeitszeiten ${format(startDate, 'MMMM yyyy', { locale: de })}`,
+        pageWidth / 2, 
+        22, 
+        { align: 'center' }
+      );
+      
+      // Prepare table data
+      const tableData: any[] = [];
+      
+      // German month names
+      const monthNames = [
+        'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+        'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+      ];
+      
+      // Add data for each day of the month
+      for (let day = 1; day <= endDate.getDate(); day++) {
+        const currentDate = new Date(year, monthIndex - 1, day);
+        const dateKey = format(currentDate, 'yyyy-MM-dd');
+        const weekday = format(currentDate, 'EEE', { locale: de });
+        
+        const dayEntries = groupedEntries[dateKey] || [];
+        const dailyTotal = dailyTotals[dateKey] || { workTime: 0, breakTime: 0 };
+        
+        // Format work time and break time
+        const workTimeFormatted = dailyTotal.workTime > 0 
+          ? formatMinutesToHours(dailyTotal.workTime) 
+          : '';
+        const breakTimeFormatted = dailyTotal.breakTime > 0 
+          ? formatMinutesToHours(dailyTotal.breakTime) 
+          : '';
+        
+        // Create details of entries for this day
+        let entryDetails = '';
+        if (dayEntries.length > 0) {
+          entryDetails = dayEntries.map(entry => {
+            if (!entry.end_time) return ''; // Skip ongoing entries
+            const startTime = format(new Date(entry.start_time), 'HH:mm');
+            const endTime = format(new Date(entry.end_time), 'HH:mm');
+            const duration = formatMinutesToHours(
+              differenceInMinutes(new Date(entry.end_time), new Date(entry.start_time))
+            );
+            return `${startTime}-${endTime} (${duration})${entry.project ? ` ${entry.project}` : ''}`;
+          }).filter(Boolean).join('\n');
+        }
+        
+        tableData.push([
+          `${day}. ${weekday}`,
+          workTimeFormatted,
+          breakTimeFormatted,
+          entryDetails
+        ]);
+      }
+      
+      // Add table to PDF
+      autoTable(doc, {
+        head: [['Datum', 'Arbeitszeit', 'Pause', 'Details']],
+        body: tableData,
+        startY: 30,
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+          overflow: 'linebreak',
+          cellWidth: 'wrap',
+          valign: 'middle'
+        },
+        headStyles: {
+          fillColor: [230, 210, 180], // Light beige
+          textColor: [101, 67, 33], // Dark brown
+          fontSize: 10,
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        bodyStyles: {
+          textColor: [0, 0, 0], // Black text
+          fontSize: 8,
+          halign: 'center'
+        },
+        alternateRowStyles: {
+          fillColor: [255, 255, 255] // White background
+        },
+        columnStyles: {
+          0: { 
+            cellWidth: 25,
+            fontStyle: 'bold',
+            halign: 'left',
+            fillColor: [245, 230, 210] // Slightly darker beige
+          },
+          1: { cellWidth: 25 },
+          2: { cellWidth: 25 },
+          3: { cellWidth: 'auto', halign: 'left' }
+        },
+        theme: 'grid',
+        tableLineColor: [200, 180, 160],
+        tableLineWidth: 0.1
+      });
+      
+      // Add summary
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      let totalWorkMinutes = 0;
+      let totalBreakMinutes = 0;
+      
+      Object.values(dailyTotals).forEach(daily => {
+        totalWorkMinutes += daily.workTime;
+        totalBreakMinutes += daily.breakTime;
+      });
+      
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Gesamtarbeitszeit: ${formatMinutesToHours(totalWorkMinutes)}`, 15, finalY);
+      doc.text(`Gesamtpause: ${formatMinutesToHours(totalBreakMinutes)}`, 15, finalY + 7);
+      
+      // Save the PDF
+      doc.save(`arbeitszeiten-${month}.pdf`);
+      
+      setShowExportDialog(false);
+      toast({
+        title: "Export erfolgreich",
+        description: `Die Arbeitszeiten für ${monthNames[monthIndex - 1]} ${year} wurden exportiert.`,
+      });
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast({
+        title: "Fehler",
+        description: "Beim Export ist ein Fehler aufgetreten.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Get available months for export
+  const getAvailableMonths = () => {
+    const currentYear = new Date().getFullYear();
+    const months = [];
+    
+    // Add all 12 months of the current year
+    for (let i = 1; i <= 12; i++) {
+      months.push({
+        value: `${currentYear}-${i.toString().padStart(2, '0')}`,
+        label: format(new Date(currentYear, i - 1, 1), 'MMMM yyyy', { locale: de })
+      });
+    }
+    
+    return months;
+  };
+
   if (authLoading || !employee) {
     return (
       <DashboardLayout>
@@ -635,7 +883,48 @@ const TimeTracking = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Zeiterfassung</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold">Zeiterfassung</h1>
+        
+        {/* Export Dialog */}
+        <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Arbeitszeiten exportieren</DialogTitle>
+              <DialogDescription>
+                Wählen Sie den Monat aus, den Sie exportieren möchten
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Monat auswählen</Label>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Monat auswählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAvailableMonths().map((month) => (
+                      <SelectItem key={month.value} value={month.value}>
+                        {month.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+                Abbrechen
+              </Button>
+              <Button 
+                onClick={() => exportTimeEntriesToPDF(selectedMonth)}
+                disabled={!selectedMonth}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export PDF
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         
         {/* Quick Actions */}
         <Card>
@@ -646,9 +935,15 @@ const TimeTracking = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setShowExportDialog(true)}>
+                <Download className="mr-2 h-4 w-4" />
+                Export PDF
+              </Button>
+            </div>
             {activeEntry && (
               <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <p className="font-medium text-green-800">Aktive Zeiterfassung</p>
                     <p className="text-sm text-green-700">
@@ -663,37 +958,37 @@ const TimeTracking = () => {
               </div>
             )}
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {!activeEntry ? (
                 <Button 
                   size="lg" 
-                  className="h-48 bg-green-600 hover:bg-green-700"
+                  className="h-32 sm:h-48 bg-green-600 hover:bg-green-700"
                   onClick={handleStartTime}
                 >
-                  <Play className="mr-2" />
-                  Zeit starten
+                  <Play className="mr-2 h-6 w-6" />
+                  <span className="text-lg">Zeit starten</span>
                 </Button>
               ) : (
                 <Button 
                   size="lg" 
                   variant="destructive" 
-                  className="h-48"
+                  className="h-32 sm:h-48"
                   onClick={handleStopTime}
                 >
-                  <Square className="mr-2" />
-                  Zeit stoppen
+                  <Square className="mr-2 h-6 w-6" />
+                  <span className="text-lg">Zeit stoppen</span>
                 </Button>
               )}
               
               <Button 
                 size="lg" 
                 variant="outline" 
-                className="h-48"
+                className="h-32 sm:h-48"
                 onClick={handleStartBreak}
                 disabled={!activeEntry}
               >
-                <Coffee className="mr-2" />
-                Pause beginnen
+                <Coffee className="mr-2 h-6 w-6" />
+                <span className="text-lg">Pause beginnen</span>
               </Button>
             </div>
           </CardContent>
@@ -705,7 +1000,7 @@ const TimeTracking = () => {
             <CardTitle>Manueller Eintrag</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="manual-date">Datum</Label>
                 <Input
@@ -752,7 +1047,7 @@ const TimeTracking = () => {
                 onChange={(e) => setManualEntry({...manualEntry, description: e.target.value})}
               />
             </div>
-            <Button onClick={handleManualEntry}>
+            <Button onClick={handleManualEntry} className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               Eintrag hinzufügen
             </Button>

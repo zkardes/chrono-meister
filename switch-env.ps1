@@ -1,4 +1,4 @@
-# Environment Switcher for Chrono Meister
+# Environment Switcher for TimeTrack-Pro
 # Usage: .\switch-env.ps1 [local|production]
 
 param(

@@ -111,15 +111,15 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-card border-r transform transition-transform lg:translate-x-0 ${
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-card border-r transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center justify-between px-6 border-b">
+          <div className="flex h-16 items-center justify-between px-4 border-b">
             <div className="flex items-center gap-2">
               <Clock className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">TimeTrack Pro</span>
+              <span className="text-lg font-bold">TimeTrack-Pro</span>
             </div>
             <Button
               variant="ghost"
@@ -132,7 +132,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 space-y-1 px-3 py-4">
+          <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
             {allNavigation.map((item) => {
               const isActive = location.pathname === item.href;
               return (
@@ -145,8 +145,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   }`}
                 >
-                  <item.icon className="h-5 w-5" />
-                  {item.name}
+                  <item.icon className="h-5 w-5 flex-shrink-0" />
+                  <span className="truncate">{item.name}</span>
                 </Link>
               );
             })}
@@ -176,7 +176,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-6">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 sm:gap-4 border-b bg-background px-4 sm:px-6">
           <Button
             variant="ghost"
             size="icon"
@@ -194,13 +194,13 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
           {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2">
+              <Button variant="ghost" className="flex items-center gap-2 px-2">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback>
                     {getEmployeeInitials(employee, isAdmin, user?.email)}
                   </AvatarFallback>
                 </Avatar>
-                <span className="hidden md:block">
+                <span className="hidden md:block max-w-[120px] truncate">
                   {formatEmployeeName(employee, user?.email)}
                 </span>
                 <ChevronDown className="h-4 w-4" />
@@ -232,7 +232,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         </header>
 
         {/* Page content */}
-        <main className="p-6">
+        <main className="p-4 sm:p-6">
           <SafariBanner />
           <SessionStatusBanner />
           {children}
