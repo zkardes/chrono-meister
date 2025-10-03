@@ -14,6 +14,7 @@ interface AuthContextType extends AuthUser {
   isManager: boolean;
   recoverSession: () => Promise<any>;
   debug: typeof debugAuth;
+  isInitialLoad: boolean; // New property to indicate initial load
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,6 +37,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const isAuthenticated = !!authState.user;
   const isAdmin = authState.profile?.role === 'admin';
   const isManager = authState.profile?.role === 'manager' || isAdmin;
+  const isInitialLoad = !authState.initialLoadComplete; // New flag
 
   // Session recovery function with better error handling
   const recoverSession = async () => {
@@ -158,6 +160,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isManager,
     recoverSession,
     debug: debugAuth,
+    isInitialLoad, // Expose the new flag
   };
 
   return (
