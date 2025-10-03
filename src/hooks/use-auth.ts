@@ -13,6 +13,7 @@ export interface AuthUser {
   employee: Employee | null;
   company: Company | null;
   loading: boolean;
+  initialLoadComplete: boolean; // New flag to track initial load
 }
 
 export const useAuth = () => {
@@ -22,6 +23,7 @@ export const useAuth = () => {
     employee: null,
     company: null,
     loading: true,
+    initialLoadComplete: false, // Track if we've completed at least one load cycle
   });
 
   useEffect(() => {
@@ -36,24 +38,24 @@ export const useAuth = () => {
         if (error) {
           console.error('❌ Session error:', error);
           if (mounted) {
-            setAuthState(prev => ({ ...prev, loading: false }));
+            setAuthState(prev => ({ ...prev, loading: false, initialLoadComplete: true }));
           }
           return;
         }
         
         if (session?.user && mounted) {
           console.log('✅ Session found, loading user data...');
-          await loadUserData(session.user);
+          await loadUserData(session.user, true); // Pass true for initial load
         } else {
           console.log('ℹ️ No session found');
           if (mounted) {
-            setAuthState(prev => ({ ...prev, loading: false }));
+            setAuthState(prev => ({ ...prev, loading: false, initialLoadComplete: true }));
           }
         }
       } catch (error) {
         console.error('❌ Initial session error:', error);
         if (mounted) {
-          setAuthState(prev => ({ ...prev, loading: false }));
+          setAuthState(prev => ({ ...prev, loading: false, initialLoadComplete: true }));
         }
       }
     };
@@ -85,8 +87,10 @@ export const useAuth = () => {
             employee: null,
             company: null,
             loading: false,
+            initialLoadComplete: false,
           });
         }
+
       }
     );
 
@@ -96,9 +100,33 @@ export const useAuth = () => {
     };
   }, []);
 
-  const loadUserData = async (user: User) => {
+  const loadUserData = async (user: User, isInitialLoad = false) => {
     try {
-      console.log('📊 Loading user data for:', user.email);
+      console.log('📊 Loading user data for:', user.email, 'Initial load:', isInitialLoad);
+      
+      // For initial loads, try to get cached data first for faster rendering
+      if (isInitialLoad) {
+        // Try to get cached data from localStorage for immediate rendering
+        const cachedProfile = localStorage.getItem(`user_profile_${user.id}`);
+        const cachedEmployee = localStorage.getItem(`user_employee_${user.id}`);
+        const cachedCompany = localStorage.getItem(`user_company_${user.id}`);
+        
+        if (cachedProfile) {
+          try {
+            const profile = JSON.parse(cachedProfile);
+            setAuthState(prev => ({
+              ...prev,
+              user,
+              profile,
+              employee: cachedEmployee ? JSON.parse(cachedEmployee) : null,
+              company: cachedCompany ? JSON.parse(cachedCompany) : null,
+              loading: false, // Set loading to false for immediate render
+            }));
+          } catch (e) {
+            console.warn('Failed to parse cached user data');
+          }
+        }
+      }
       
       // Get user profile with retry logic
       let profile = null;
@@ -123,6 +151,13 @@ export const useAuth = () => {
         } else {
           profile = profileData;
           console.log('✅ Profile loaded');
+          
+          // Cache profile data for faster loads
+          try {
+            localStorage.setItem(`user_profile_${user.id}`, JSON.stringify(profile));
+          } catch (e) {
+            console.warn('Failed to cache profile data');
+          }
         }
       }
 
@@ -140,6 +175,13 @@ export const useAuth = () => {
         } else {
           employee = employeeData;
           console.log('✅ Employee loaded');
+          
+          // Cache employee data
+          try {
+            localStorage.setItem(`user_employee_${user.id}`, JSON.stringify(employee));
+          } catch (e) {
+            console.warn('Failed to cache employee data');
+          }
         }
       }
 
@@ -157,6 +199,13 @@ export const useAuth = () => {
         } else {
           company = companyData;
           console.log('✅ Company loaded');
+          
+          // Cache company data
+          try {
+            localStorage.setItem(`user_company_${user.id}`, JSON.stringify(company));
+          } catch (e) {
+            console.warn('Failed to cache company data');
+          }
         }
       }
 
@@ -166,12 +215,17 @@ export const useAuth = () => {
         employee,
         company,
         loading: false,
+        initialLoadComplete: true, // Mark that we've completed a full load
       });
       
       console.log('✨ User data loading complete');
     } catch (error) {
       console.error('❌ Error loading user data:', error);
-      setAuthState(prev => ({ ...prev, loading: false }));
+      setAuthState(prev => ({ 
+        ...prev, 
+        loading: false,
+        initialLoadComplete: true, // Even on error, mark as complete
+      }));
     }
   };
 

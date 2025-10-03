@@ -10,11 +10,12 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, adminOnly = false, managerOnly = false }: ProtectedRouteProps) => {
-  const { isAuthenticated, loading, isAdmin, isManager } = useAuthContext();
+  const { isAuthenticated, loading, isAdmin, isManager, isInitialLoad } = useAuthContext();
   const location = useLocation();
 
   // Show loading spinner while checking authentication
-  if (loading) {
+  // But allow rendering if we have cached data (isInitialLoad = true but we have a user)
+  if (loading && !isInitialLoad) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center space-y-4">
@@ -25,8 +26,19 @@ const ProtectedRoute = ({ children, adminOnly = false, managerOnly = false }: Pr
     );
   }
 
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
+  // If we're in initial load but have a user, show content immediately
+  // This allows for optimistic rendering with cached data
+  if (isInitialLoad && isAuthenticated) {
+    // Render content optimistically while loading fresh data in background
+    console.log('Rendering optimistically with cached data');
+  }
+  // If we've completed initial load and don't have auth, redirect to login
+  else if (!isInitialLoad && !isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Redirect to login if not authenticated and not in initial load
+  if (!isAuthenticated && !isInitialLoad) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
